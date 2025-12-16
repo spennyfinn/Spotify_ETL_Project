@@ -17,6 +17,7 @@ ENV/
 spotify_token.json
 *.token
 *.key
+*.cache
 
 # Database backups (can be large)
 *.sql

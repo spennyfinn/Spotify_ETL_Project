@@ -221,16 +221,6 @@ def get_artist_data(kafka_data, name,artist_id_dict, id_dict_path, key=key ):
 
 
 
-       
-        
-        
-
-
-
-
-
-
-
 # -------------------------------
 # Main Execution
 # -------------------------------
@@ -239,7 +229,7 @@ if __name__=='__main__':
     
     artist_id_filepath='artists_ids.json'
     artist_id_dict=read_id_json_file()
-    fetch_interval = 86400  # Fetch new top tracks daily (24 hours)
+    fetch_interval = 86400 
     
     logging.info("Starting continuous Last.fm extract process")
     logging.info(f"Will fetch new top tracks daily (every {fetch_interval/3600} hours)")
@@ -247,7 +237,7 @@ if __name__=='__main__':
     while True:
         try:
             count=0
-            tracks= get_top_tracks(start=1, end=20)
+            tracks= get_top_tracks(start=1, end=100)
             message_count = 0
             batch_size = 100
             

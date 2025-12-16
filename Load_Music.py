@@ -177,10 +177,9 @@ def get_db():
 # -------------------------------
 # SQL Queries
 # -------------------------------
-insert_song_query = ("INSERT INTO songs(song_name, song_id, rank, song_listeners, duration_seconds, duration_minutes, album_id, artist_id, song_url,engagement_ratio) "
-                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+insert_song_query = ("INSERT INTO songs(song_name, song_id, song_listeners, duration_seconds, duration_minutes, album_id, artist_id, song_url,engagement_ratio) "
+                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
                  "ON CONFLICT (song_name, artist_id) DO UPDATE "
-                 "SET rank = EXCLUDED.rank, "
                  "song_listeners = EXCLUDED.song_listeners,"
                  "engagement_ratio = EXCLUDED.engagement_ratio;")
                  
@@ -235,20 +234,9 @@ if __name__=='__main__':
     conn,cur=get_db()
     try:
         logging.info("Starting continuous ETL process - loading music data into database")
-        
-        # Get the maximum rank currently in the database to continue sequential numbering
-        cur.execute('SELECT COALESCE(MAX(rank), 0) FROM songs;')
-        max_rank_result = cur.fetchone()
-        sequential_rank = max_rank_result[0] if max_rank_result else 0
-        logging.info(f"Starting sequential rank from: {sequential_rank}")
 
-        # Track statistics
-        lastfm_count = 0
-        spotify_count = 0
+        
         errors_count = 0
-        last_rank_reassign = time.time()
-        rank_reassign_interval = 3600  # Reassign ranks every hour
-        summary_interval = 300  # Log summary every 5 minutes
 
         for message in consume_message(consumer, 'music_transformed'):
             if message['source']== 'Lastfm':
@@ -282,44 +270,11 @@ if __name__=='__main__':
                     errors_count += 1
                     continue
                 
-                # Check if this song already exists in the database and get its current rank
-                cur.execute("SELECT rank FROM songs WHERE song_name = %s AND artist_id = %s",
-                           (song[0], song[7]))  # song_name and artist_id
-                existing_song = cur.fetchone()
-                
-                # Get the next sequential rank
-                sequential_rank += 1
-                new_rank = sequential_rank
-                
-                # If updating an existing song, check for rank conflicts
-                if existing_song:
-                    old_rank = existing_song[0]
-                    # If the new rank conflicts with another song, temporarily free it
-                    if old_rank != new_rank:
-                        cur.execute("SELECT song_name, artist_id FROM songs WHERE rank = %s AND (song_name != %s OR artist_id != %s)",
-                                   (new_rank, song[0], song[7]))
-                        conflict = cur.fetchone()
-                        if conflict:
-                            # Temporarily set the conflicting song's rank to a high temp value
-                            # We'll reassign sequentially at the end
-                            cur.execute("UPDATE songs SET rank = 9999999 WHERE rank = %s AND (song_name != %s OR artist_id != %s)",
-                                       (new_rank, song[0], song[7]))
-                
-                # Update rank in song row before insertion
-                song[2] = new_rank
-                
-                # Insert/update the song with the new sequential rank
+                # Insert the song 
                 try:
                     cur.execute(insert_song_query, song)
-                    logging.info(f"✓ Song loaded/updated: {song_name} by {artist_name} (Rank: {new_rank})")
+                    logging.info(f"✓ Song loaded/updated: {song_name} by {artist_name}")
                 except psycopg2.IntegrityError as e:
-                    # If there's still a rank conflict, handle it
-                    if 'rank' in str(e):
-                        # Use a temporary high rank, will be reassigned at the end
-                        song[2] = 9999999 + sequential_rank
-                        cur.execute(insert_song_query, song)
-                        logging.warning(f"⚠ Song loaded with temporary rank due to conflict: {song_name} by {artist_name}")
-                    else:
                         logging.error(f"✗ Failed to load song {song_name} by {artist_name}: {e}")
                         errors_count += 1
                         raise
@@ -380,26 +335,7 @@ if __name__=='__main__':
                 
                 spotify_count += 1
             
-            # Periodically reassign ranks and log statistics
-            current_time = time.time()
-            if current_time - last_rank_reassign >= rank_reassign_interval:
-                logging.info("Periodic rank reassignment starting...")
-                cur.execute("""
-                    UPDATE songs
-                    SET rank = subquery.new_rank
-                    FROM (
-                        SELECT song_name, artist_id,
-                               ROW_NUMBER() OVER (ORDER BY 
-                                   CASE WHEN rank >= 9999999 THEN 9999999 ELSE rank END,
-                                   song_name, artist_id
-                               ) as new_rank
-                        FROM songs
-                    ) AS subquery
-                    WHERE songs.song_name = subquery.song_name 
-                      AND songs.artist_id = subquery.artist_id
-                """)
-                ranks_updated = cur.rowcount
-                logging.info(f"✓ Rank reassignment complete: {ranks_updated} songs updated")
+
                 
                 # Summary statistics
                 logging.info("=" * 60)
@@ -411,7 +347,6 @@ if __name__=='__main__':
                 logging.info(f"Errors encountered: {errors_count}")
                 logging.info("=" * 60)
                 
-                last_rank_reassign = current_time
                 
     finally:
         cur.close()
