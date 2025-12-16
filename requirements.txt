@@ -16,3 +16,6 @@ psycopg2-binary>=2.9.9
 # JSON flattening utility
 flatten-json>=0.1.13
 
+# Spotify API wrapper
+spotipy>=2.23.0
+

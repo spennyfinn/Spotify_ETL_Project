@@ -1,9 +1,13 @@
 
+from tarfile import data_filter
 from confluent_kafka import Consumer, Producer
 import json
 import uuid
+
+from numba import none
 from Load_Music import consume_message
 from pydantic import ValidationError 
+from Validation_Classes.Validation_Class_Audio_Features import audio_features
 from Validation_Classes.Validation_Class_Lastfm import Last_fm_data
 from Validation_Classes.Validation_Class_Spotify import Spotify_Data
 import logging
@@ -152,6 +156,27 @@ def transform_data(track):
         data['artist_id']= str(get_artist_id(data['artist_name'],'N/A',artist_id_dict,'artist_id.json'))
         data['source']= 'Spotify'
         print(data)
+    elif track['source']== 'preview_url':
+        
+        data['song_name'] = track.get('name', None)
+        data['artist_id'] = track.get('artist_id', None)
+        if not data['song_name'] or not data['artist_id']:
+            print('Skipping this track due to the lack of a song_name or artist_name')
+            return None
+        data['song_id']= str(track.get('song_id', None))
+        data['bpm']= round(float(track.get('bpm', 0)),3)
+        data['energy']= round(float(track.get('energy', 0)),5)
+        data['zero_crossing_rate']= round(float(track.get('zero_crossing_rate', 0)),5)
+        data['spectral_centroid'] = round(float(track.get('spectral_centroid', 0)),3)
+        data['preview_url'] = str(track.get('preview_url', None)).strip()
+        data['harmonic_ratio']= round(float(track.get('harmonic_ratio', 0)),5)
+        data['percussive_ratio']=round(float(track.get('percussive_ratio', 0)),5)
+
+
+        tempo_normalized= min(data['bpm']/200, 1.0)
+        data['danceability'] = round((tempo_normalized*.3)+(data['energy']*.5)+(data['zero_crossing_rate']*.2),5)
+        data['source']= track.get('source', 'preview_url')
+        print(data)
     return data
         
 
@@ -175,7 +200,7 @@ if __name__=='__main__':
         producer = Producer(producer_config)
 
         message_count = 0
-        batch_size = 100
+        batch_size = 1
         
         for track in consume_message(consumer, 'music_top_tracks'):
             data= transform_data(track)
@@ -191,12 +216,19 @@ if __name__=='__main__':
                 except ValidationError as e:
                     print(f'Validation Error: {e}')
                     continue
-            else:
+            elif data['source']=='Spotify':
                 try: 
                     validated_data=Spotify_Data(**data)
                 except ValidationError as e:
                     print(f'Validation Error: {e}')
                     continue
+            elif data['source']=='preview_url':
+                try:
+                    validated_data = audio_features(**data)
+                except ValidationError as e:
+                    print(f'Validation Error: {e}')
+                    continue
+            
             producer.produce(
                 topic= 'music_transformed',
                 key= data['song_id'],

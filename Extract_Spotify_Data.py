@@ -88,7 +88,7 @@ def similarity_score(str1, str2):
 # -------------------------------
 load_dotenv()
 CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')
-CLIENT_SECRET=os.getenv('SPOTIFY_CLEINT_SECRET')
+CLIENT_SECRET=os.getenv('SPOTIFY_CLIENT_SECRET')
 TOKEN_FILE = "spotify_token.json"
 
 
