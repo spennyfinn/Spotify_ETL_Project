@@ -1,18 +1,6 @@
-"""
-Kafka Producer for Last.fm Top Tracks
-
-This script fetches top tracks from Last.fm API, enriches them with track and artist info,
-transforms the data, and sends it to a Kafka topic ('music_top_tracks') for downstream processing.
-
-Tech Stack:
-- Python, requests, confluent_kafka, uuid
-- Last.fm API
-- Logging and dotenv for configs
-"""
 
 import requests
 import json
-from confluent_kafka import Producer
 import logging
 from dotenv import load_dotenv
 import os
@@ -20,7 +8,8 @@ import math
 import uuid
 import json
 import time
-
+from src.utils.kafka_utils import  create_producer, flush_kafka_producer, send_through_kafka
+from src.utils.artist_utils import get_artist_id, read_id_json_file
 # -------------------------------
 # Load Environment Variables
 # -------------------------------
@@ -33,95 +22,32 @@ key=os.getenv("LAST_FM_KEY")
 # -------------------------------
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-# -------------------------------
-# Kafka Configuration
-# -------------------------------
-producer_config = {
-    'bootstrap.servers': 'localhost:9092',
-    'client.id': 'music-streaming-producer'
-}
-producer = Producer(producer_config)
-
-# -------------------------------
-# Utility Functions
-# -------------------------------
-
-def get_artist_id(artist_name, artist_id, artist_id_dict, id_dict_path):
-     """
-    Retrieve or generate a unique ID for an artist.
-
-    Args:
-        artist_name (str): Name of the artist.
-        artist_id (str): Existing artist ID, if available.
-        artist_id_dict (dict): Dictionary mapping artist names to unique IDs.
-        id_dict_path (str): Path to JSON file storing artist IDs.
-
-    Returns:
-        str: Unique artist ID (existing or newly generated UUID).
-    """
-     print(artist_name)
-     key =artist_name.strip().lower()
-     if artist_id and artist_id!='N/A':
-          return artist_id
-     if key in artist_id_dict:
-          return artist_id_dict[key]
-     new_id = str(uuid.uuid4())
-     artist_id_dict[key]=new_id
-     with open(id_dict_path, 'w') as f:
-          json.dump(artist_id_dict, f,indent=4)
-     return new_id
-
-def read_id_json_file(artist_id_filepath='artists_ids.json'):
-     """Load or initialize JSON file containing artist IDs."""
-     if os.path.exists(artist_id_filepath):
-         with open(artist_id_filepath,'r') as f:
-              artist_id_dict = json.load(f)
-              return artist_id_dict
-     else:
-         artist_id_dict={}
-         return artist_id_dict
-     
-def send_through_kafka( track ):
-    # sends data to kafka
-    topic_name = 'music_top_tracks'
-    track_json = json.dumps(track)
-    try:
-        producer.produce( topic=topic_name, key=track['song_id'], value = track_json)
-        print(f"Message queued: {track['name']}")
-    except Exception as e:
-        print(f"Failed to send track {track['name']}: {e}")
-        return
-
-def flush_kafka_producer():
-    """Flush all queued messages to Kafka."""
-    producer.flush()
 
 
 # -------------------------------
 # API Functions
 # -------------------------------
-def get_top_tracks(start:int, end:int,key=key):
+def get_top_tracks(start:int, end:int, key=key):
     """Fetch top tracks from Last.fm API for given pages."""
     track_list=[]
-    for page in range(start,end):
+    for page in range(start, end):
         url= f'http://ws.audioscrobbler.com/2.0/?method=geo.getTopTracks&country=United+States&api_key={key}&format=json&page={page}'
         response= requests.get(url)
         logging.debug("API raw reponse: %s", response.text[:100])
         data=response.json()
-        top_tracks=data['tracks']['track']
+        top_tracks=data.get('tracks', {}).get('track',{})
         track_list.extend(top_tracks)
     return track_list
         
-def get_basic_data(song, count):
+def get_basic_track_data(song, count):
         """
     Extract basic track and artist information from raw Last.fm API data.
 
     Args:
         song (dict): Raw track data from Last.fm API.
-        count (int): Current track count for rank calculation.
 
     Returns:
-        dict: Dictionary with track name, artist name, duration, rank, listeners,
+        dict: Dictionary with track name, artist name, listeners,
               song URL, song ID, and other basic metadata.
     """
         kafka_data= {}
@@ -131,10 +57,7 @@ def get_basic_data(song, count):
         kafka_data['name']=song.get('name', 'N/A')
         artist_info=song.get('artist',{})
         kafka_data['artist']['name']= artist_info.get('name', 'N/A')
-        kafka_data['duration']=song.get('duration', 0)
-        rank = song.get('@attr', {}).get('rank', 0)
         page =math.floor((count) /50)
-        kafka_data['rank'] = int(rank) + (page*50)
         kafka_data['num_song_listeners']=song.get('listeners', 0)
         kafka_data['song_url']=song.get('url', "N/A")
         kafka_data['song_id']=song.get('mbid', str(uuid.uuid4()))
@@ -170,6 +93,7 @@ def get_song_data(kafka_data, key=key):
             return None
         logging.info("Song info for %s has been retrieved", kafka_data['name'])
         return kafka_data
+
 
 def get_artist_data(kafka_data, name,artist_id_dict, id_dict_path, key=key ):
     """
@@ -212,7 +136,7 @@ def get_artist_data(kafka_data, name,artist_id_dict, id_dict_path, key=key ):
             kafka_data['source']='Lastfm'
      
     except (requests.RequestException, json.JSONDecodeError) as e:
-        track_name = kafka_data['name'] if kafka_data else 'Unknown'
+        track_name = kafka_data.get('name', 'Unknown')
         artist_name = kafka_data['artist']['name'] if kafka_data else name
         logging.error(f"HTTP request failed for {track_name} by {artist_name}: {e}")
         return None
@@ -225,6 +149,8 @@ def get_artist_data(kafka_data, name,artist_id_dict, id_dict_path, key=key ):
 # Main Execution
 # -------------------------------
 if __name__=='__main__':
+    
+    producer=create_producer('music-streaming-producer')
     
     
     artist_id_filepath='artists_ids.json'
@@ -245,7 +171,7 @@ if __name__=='__main__':
             
             for song in tracks:
                 count += 1
-                data= get_basic_data(song, count)
+                data= get_basic_track_data(song, count)
                 song_data = get_song_data(data)
                 
                 if not song_data:
@@ -257,15 +183,15 @@ if __name__=='__main__':
                     logging.warning(f"Skipping {song_data.get('name', 'Unknown')} - failed to get artist data")
                     continue
                 
-                artist_data['rank']=count
-                send_through_kafka(artist_data)
+    
+                send_through_kafka(artist_data, 'music_top_tracks', producer)
                 message_count += 1
                 
                 if message_count % batch_size == 0:
-                    flush_kafka_producer()
+                    flush_kafka_producer(producer)
                     logging.info(f"Flushed {message_count} messages to Kafka")
             
-            flush_kafka_producer()
+            flush_kafka_producer(producer)
             logging.info(f"Batch complete. Total messages sent: {message_count}")
             
             logging.info(f"Waiting {fetch_interval/3600} hours until next daily fetch...")

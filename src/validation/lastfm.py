@@ -1,4 +1,4 @@
-from pydantic import ValidationError, BaseModel, Field, field_validator, model_validator
+from pydantic import  BaseModel, field_validator, model_validator
 from typing import List
 
 
@@ -6,9 +6,6 @@ from typing import List
 class Last_fm_data(BaseModel):
     song_name: str
     artist_name: str
-    rank: int
-    duration_seconds: int
-    duration_minutes: float
     num_song_listeners:int
     song_id: str
     song_url: str
@@ -24,8 +21,10 @@ class Last_fm_data(BaseModel):
     engagement_ratio:float
 
     # Ensures that numerical valuesa are non negative
-    @field_validator('rank', 'duration_minutes', 'duration_seconds', 'num_song_listeners', 'artist_total_playcount', 'artist_total_listeners', 'plays_per_listener', 'engagement_ratio')
+    @field_validator('num_song_listeners', 'artist_total_playcount', 'artist_total_listeners', 'plays_per_listener', 'engagement_ratio')
     def non_negative_num(cls, value, info):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f'{info.field_name} is supposed to be a numerical value but is: {type(value)}')
         if value<0:
             raise ValueError(f"{info.field_name} has a negative value when it shouldn't: {value}")
         elif value ==0:
@@ -45,12 +44,6 @@ class Last_fm_data(BaseModel):
     @model_validator(mode='after')
     def check_calculations(cls, model):
         errors=[]
-
-        if model.duration_seconds is not None and model.duration_minutes is not None:
-            calculated_mins = round((model.duration_seconds/60),2)
-            if calculated_mins != model.duration_minutes:
-                errors.append(f"duration_minutes was calculated incorrectly: minutes={model.duration_minutes}, calculated_minutes={calculated_mins}")
-        
         if model.artist_total_listeners is not None and model.artist_total_playcount is not None and model.plays_per_listener is not None:
             calculated_ppl = round(model.artist_total_playcount/model.artist_total_listeners,5)
             if calculated_ppl != model.plays_per_listener:

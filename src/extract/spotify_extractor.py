@@ -1,211 +1,39 @@
 import requests
 from dotenv import load_dotenv
 import os
-from Load_Music import get_db
-from Extract_Lastfm_Data import send_through_kafka
+from src.load.data_loader import get_db
+from src.extract.lastfm_extractor import send_through_kafka
 import time
 import base64
 import json
 from confluent_kafka import Producer
 from urllib.parse import quote
-import re
-from difflib import SequenceMatcher
-
-def normalize_song_name(name):
-    """
-    Normalize song name by removing extra formatting for comparison.
-    
-    Args:
-        name (str): Song name to normalize
-        
-    Returns:
-        str: Normalized song name in lowercase
-    """
-    if not name:
-        return ""
-    base_name = re.sub(r'\s*\([^)]*\)', '', name)
-    base_name = re.sub(r'\s*\[[^\]]*\]', '', base_name)
-    base_name = re.sub(r'\s*feat\.?\s*.*$', '', base_name, flags=re.IGNORECASE)
-    base_name = re.sub(r'\s*ft\.?\s*.*$', '', base_name, flags=re.IGNORECASE)
-    base_name = re.sub(r'\s*\+\s*.*$', '', base_name)
-    return base_name.strip().lower()
-
-def has_collaborators(name):
-    """
-    Check if a song name contains collaborator indicators.
-    
-    Args:
-        name (str): Song name to check
-        
-    Returns:
-        bool: True if song has collaborators, False otherwise
-    """
-    name_lower = name.lower()
-    return ('+' in name_lower or 
-            'feat' in name_lower or 
-            'ft.' in name_lower or
-            'featuring' in name_lower)
-
-def extract_collaborators(name):
-    """
-    Extract featured artists or collaborators from song name.
-    
-    Args:
-        name (str): Song name to parse
-        
-    Returns:
-        list: List of collaborator names found in the song name
-    """
-    collaborators = []
-    name_lower = name.lower()
-    
-    if '+' in name:
-        parts = name.split('+')
-        if len(parts) > 1:
-            collaborators.extend([p.strip() for p in parts[1:]])
-    
-    feat_match = re.search(r'(?:feat\.?|ft\.?|featuring)\s*([^\(\)\[\]]+)', name_lower)
-    if feat_match:
-        collaborators.append(feat_match.group(1).strip())
-    
-    return collaborators
-
-def similarity_score(str1, str2):
-    """
-    Calculate similarity score between two strings.
-    
-    Args:
-        str1 (str): First string
-        str2 (str): Second string
-        
-    Returns:
-        float: Similarity score between 0 and 1
-    """
-    return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
-
+from src.utils.kafka_utils import create_producer
+from src.utils.text_utils import normalize_song_name, similarity_score, has_collaborators, extract_collaborators
+from src.utils.spotify_utils import get_spotify_token
+from src.utils.database import get_db, get_song_needing_spotify_data
 # -------------------------------
 # Environment Configuration
 # -------------------------------
 load_dotenv()
 CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')
 CLIENT_SECRET=os.getenv('SPOTIFY_CLIENT_SECRET')
-TOKEN_FILE = "spotify_token.json"
+
+logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
 
-# -------------------------------
-# Kafka Configuration
-# -------------------------------
-producer_config = {
-    'bootstrap.servers': 'localhost:9092',
-    'client.id': 'music-streaming-producer'
-}
-producer = Producer(producer_config)
 
 
 # -------------------------------
 # SQL QUERY
 # -------------------------------
 
-def get_song_artist_from_db(cur):
-    """
-    Get list of songs and artists from database that need Spotify data.
-    
-    Args:
-        cur: Database cursor
-        
-    Returns:
-        list: List of tuples containing (song_name, artist_name)
-    """
-    song_artist_query=("SELECT DISTINCT s.song_name, a.artist_name FROM songs as s JOIN artists as a on a.artist_id = s.artist_id "
-    "JOIN albums as al on al.artist_name=a.artist_name WHERE s.release_date IS NULL and al.album_total_tracks IS NULL;")
-    cur.execute(song_artist_query)
-    results = cur.fetchall()
-    song_artist_list=[]
-    for result in results:
-        song_artist_list.append((result[0], result[1]))
-    return song_artist_list
 
 
-
-
-
-# -------------------------------
-# TOKEN FUNCTIONS
-# -------------------------------
-def get_spotify_token():
-    """
-    Get Spotify access token, loading from file if valid or requesting new one.
-    
-    Returns:
-        str: Access token if successful, None otherwise
-    """
-    token = load_token()
-    if token:
-        return token
-    
-    auth_str = f"{CLIENT_ID}:{CLIENT_SECRET}"
-    b64_auth = base64.b64encode(auth_str.encode()).decode("utf-8")
-
-    headers = {
-        "Authorization": f"Basic {b64_auth}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-
-    data = {
-        "grant_type": "client_credentials"
-    }
-
-    response = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
-    
-    if response.status_code != 200:
-        print("STATUS:", response.status_code)
-        print("BODY:", response.text)
-        return None
-
-    resp=response.json()
-    access_token= resp.get('access_token')
-    expires_in=resp.get('expires_in')
-    if not expires_in:
-        print("No expires_in in response")
-        return None
-    save_token(access_token,expires_in)
-    return access_token
-
-
-def save_token(token, expires_in):
-    """
-    Save Spotify access token to file with expiration time.
-    
-    Args:
-        token (str): Access token to save
-        expires_in (int): Seconds until token expires
-    """
-    if not token or not expires_in:
-        raise ValueError("Token and expires_in are required")
-    data={
-         'token': token,
-         'expires_at': time.time() + expires_in -5
-    }
-
-    with open(TOKEN_FILE, 'w') as f:
-         json.dump(data,f)
-
-
-def load_token():
-    """
-    Load Spotify access token from file if it exists and isn't expired.
-    
-    Returns:
-        str: Access token if valid, None otherwise
-    """
-    try:
-        with open(TOKEN_FILE, 'r') as f:
-            data=json.load(f)
-        if time.time() < data['expires_at']:
-            return data['token']
-    except FileNotFoundError:
-        return None
-    return None
 
 
 
@@ -315,7 +143,7 @@ def search_track(song_artist, access_token):
                 best_score = combined_score
                 best_match = item
         
-        if not best_match or best_score < 0.6:
+        if not best_match or best_score < 0.5:
             print(f"✗ No good match found for '{original_song}' by {original_artist} (best score: {best_score:.2f})")
             return None
         
@@ -360,11 +188,7 @@ def search_track(song_artist, access_token):
 if __name__=='__main__':
     import logging
     
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    producer = create_producer('music-streaming-producer')
     
     check_interval = 3600  # Check for new songs every hour
     
@@ -383,7 +207,7 @@ if __name__=='__main__':
                 time.sleep(60)
                 continue
 
-            song_artist_list = get_song_artist_from_db(cur)
+            song_artist_list = get_song_needing_spotify_data(cur)
             
             if not song_artist_list:
                 logging.info("No songs need Spotify data at this time")
