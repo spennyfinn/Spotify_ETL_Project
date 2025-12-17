@@ -3,10 +3,12 @@ from dotenv import load_dotenv
 import os
 import time
 import logging
-from Transform_data import normalize_str
-from Extract_Lastfm_Data import get_artist_data, read_id_json_file
-from Load_Music import insert_artist_query, insert_similar_artist_query, get_db
+from src.transform.data_transformer import normalize_str
+from src.extract.lastfm_extractor import get_artist_data
+from src.load.data_loader import insert_artist_query, insert_similar_artist_query
 from flatten_json import flatten
+from src.utils.database import get_db
+from src.utils.artist_utils import load_artist_ids
 
 
 
@@ -117,7 +119,7 @@ Side Effects:
             artist_data={}
             artist_data['artist']={}
             artist_data['artist']['stats']={}
-            artist_id_dict = read_id_json_file(artist_id_filepath)
+            artist_id_dict = load_artist_ids(artist_id_filepath)
             data=get_artist_data(artist_data, normalized_similar_artist, artist_id_dict, artist_id_filepath )
             if not data:
                 continue
