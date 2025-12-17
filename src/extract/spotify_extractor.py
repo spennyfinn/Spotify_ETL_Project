@@ -1,7 +1,7 @@
 import requests
 from dotenv import load_dotenv
 import os
-from src.load.data_loader import get_db
+
 from src.extract.lastfm_extractor import send_through_kafka
 import time
 import base64

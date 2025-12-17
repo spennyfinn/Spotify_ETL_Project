@@ -5,7 +5,7 @@ import librosa
 import requests
 import numpy as np
 from io import BytesIO
-from lastfm_extractor import send_through_kafka
+from src.extract.lastfm_extractor import send_through_kafka
 from src.utils.database import get_db
 
 

@@ -13,7 +13,7 @@ def get_consumer_config(group_id):
         'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", 'localhost:9092'),
         'group.id': group_id,
         'auto.offset.reset': "earliest",
-        'enable_auto_commit': True,
+        'enable.auto.commit': True,
         'auto.commit.interval.ms' : 1000
     }
 
@@ -82,7 +82,10 @@ def send_through_kafka(track, topic_name, producer):
     track_json = json.dumps(track)
     try:
         producer.produce( topic=topic_name, key=track['song_id'], value = track_json)
-        print(f"Message queued: {track['name']}")
+        try:
+            print(f"Message queued: {track['name']}")
+        except KeyError:
+            print(f"Message queued: {track['song_name']}")
     except Exception as e:
         print(f"Failed to send track {track['name']}: {e}")
         return
