@@ -8,8 +8,9 @@ from src.validation.audio_features import audio_features
 from src.validation.lastfm import Last_fm_data
 from src.validation.spotify import Spotify_Data
 import logging
-from src.extract.lastfm_extractor import get_artist_id, read_id_json_file
+from src.extract.lastfm_extractor import get_artist_id
 from src.utils.text_utils import normalize_str
+from src.utils.artist_utils import load_artist_ids
 
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -111,8 +112,7 @@ def transform_data(track):
         data['duration_seconds']= data['duration_ms']//1000
         data['duration_minutes']= round(data['duration_seconds']/60,2)
         data['song_id']= str(track['song_id'])
-        artist_id_dict= read_id_json_file()
-        data['artist_id']= str(get_artist_id(data['artist_name'],'N/A',artist_id_dict,'artist_id.json'))
+        data['artist_id']= str(track.get('artist_id', None))
         data['source']= 'Spotify'
         print(data)
 
@@ -153,13 +153,14 @@ def transform_data(track):
 # -------------------------------
 if __name__=='__main__':
     logging.info("Starting continuous transform process")
+    consumer = create_consumer('music-streaming-consumer_2')
+    producer = create_producer('music-transform-producer')
     
     try:
-        consumer = create_consumer('music-streaming-consumer_2')
-        producer = create_producer('music-transform-producer')
+        
 
         message_count = 0
-        batch_size = 1
+        batch_size = 100
         
         for track in consume_message(consumer, 'music_top_tracks'):
             data= transform_data(track)

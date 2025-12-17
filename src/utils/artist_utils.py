@@ -3,7 +3,7 @@ import uuid
 import os
 
 
-def get_artist_id(artist_name, artist_id, artist_id_dict, filepath):
+def get_artist_id(artist_name, artist_id, artist_id_dict, filepath=None):
      """
     Retrieve or generate a unique ID for an artist.
 
@@ -16,6 +16,9 @@ def get_artist_id(artist_name, artist_id, artist_id_dict, filepath):
     Returns:
         str: Unique artist ID (existing or newly generated UUID).
     """
+     if filepath is None:
+        filepath = os.getenv('ARTIST_IDS_FILEPATH')
+
      key =artist_name.strip().lower()
      if artist_id and artist_id!='N/A':
           return artist_id
@@ -26,12 +29,20 @@ def get_artist_id(artist_name, artist_id, artist_id_dict, filepath):
      save_artist_ids(artist_id_dict, filepath)
      return new_id
 
-def save_artist_ids(artist_id_dict: dict[str:str], filepath= 'artists_ids.json'):
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(artist_id_dict, 'w') as f:
+def save_artist_ids(artist_id_dict: dict[str:str], filepath=None):
+    if filepath is None:
+        filepath = os.getenv('ARTIST_IDS_FILEPATH')
+
+    dir_path = os.path.dirname(filepath)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
+    with open(filepath, 'w') as f:
           json.dump(artist_id_dict, f,indent=4)
 
-def load_artist_ids(filepath: str = 'artists_ids.json'):
+def load_artist_ids(filepath=None):
+    
+    if filepath is None:
+        filepath = os.getenv('ARTIST_IDS_FILEPATH')
     try:
         with open(filepath, 'r') as f:
             return json.load(f)

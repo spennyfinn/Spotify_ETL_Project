@@ -9,7 +9,7 @@ import uuid
 import json
 import time
 from src.utils.kafka_utils import  create_producer, flush_kafka_producer, send_through_kafka
-from src.utils.artist_utils import get_artist_id, read_id_json_file
+from src.utils.artist_utils import get_artist_id, load_artist_ids
 # -------------------------------
 # Load Environment Variables
 # -------------------------------

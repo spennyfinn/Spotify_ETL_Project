@@ -1,0 +1,13 @@
+
+fix the dictionary indexing and replace with get
+remove tables tags and artists alike
+redo lastfm extraction
+
+
+current:
+reworking the lastfm extraction logic to extract only data tjat is missing from spotify
+
+
+
+done:
+new extractor: get new releases from spotify endpoint: GET https://api.spotify.com/v1/browse/new
