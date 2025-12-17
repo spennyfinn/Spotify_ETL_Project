@@ -1,15 +1,13 @@
 import os
 from dotenv import load_dotenv
-from librosa.feature import zero_crossing_rate
 from spotify_preview_finder import finder
 import librosa
 import requests
 import numpy as np
 from io import BytesIO
-from Extract_Lastfm_Data import send_through_kafka
-from Load_Music import get_db
-from Validation_Classes.Validation_Class_Audio_Features import audio_features
-from pydantic import ValidationError
+from lastfm_extractor import send_through_kafka
+from src.utils.database import get_db
+
 
 load_dotenv()
 

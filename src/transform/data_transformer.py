@@ -1,54 +1,21 @@
-
-from tarfile import data_filter
-from confluent_kafka import Consumer, Producer
 import json
 import uuid
-
+from kafka import producer
 from numba import none
-from Load_Music import consume_message
+from src.utils.kafka_utils import consume_message, create_consumer, create_producer, flush_kafka_producer, send_through_kafka
 from pydantic import ValidationError 
-from Validation_Classes.Validation_Class_Audio_Features import audio_features
-from Validation_Classes.Validation_Class_Lastfm import Last_fm_data
-from Validation_Classes.Validation_Class_Spotify import Spotify_Data
+from src.validation.audio_features import audio_features
+from src.validation.lastfm import Last_fm_data
+from src.validation.spotify import Spotify_Data
 import logging
-from Extract_Lastfm_Data import get_artist_id, read_id_json_file
-
+from src.extract.lastfm_extractor import get_artist_id, read_id_json_file
+from src.utils.text_utils import normalize_str
 
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
-# -------------------------------
-# Kafka Configurations
-# -------------------------------
-consumer_config= {
-    'bootstrap.servers': 'localhost:9092',
-    'group.id': 'music-streaming-consumer_2',
-    'auto.offset.reset':'earliest',
-}
-producer_config = {
-    'bootstrap.servers': 'localhost:9092',
-    'client.id': 'music-transform-producer'
-}
 
-
-# -------------------------------
-# Utility Function(s)
-# -------------------------------
-def normalize_str(string:str)-> str:
-    '''
-    Normalizes a string to all lowercase characters and removes whitespace
-
-    Args:
-        string (string): A string to format
-    
-    Returns:
-        string: a lowercase string without whitespace
-    '''
-    if not string:
-        return ""
-    else:
-        return str(string).lower().strip()
 
 
     
@@ -67,8 +34,6 @@ def transform_data(track):
         dict: Transformed track data
         None: If essential fields (song or artist name) are missing
     '''
-    
-    
     print(track)
     
     # Validate track has required 'source' field
@@ -77,36 +42,32 @@ def transform_data(track):
         return None
     
     data={}
-    if track['source']=='Lastfm':
-        logging.info("Starting to transform %s", track['name'])
-        # specifying a nested list for easier lookup later
-        artist_dict =track.get('artist', {})
 
-        # song and artist name
-        song_name=track['name']
-        artist_name =  artist_dict['name']
+    if track['source']=='Lastfm':
+        
+        logging.info("Starting to transform %s", track['name'])
+
+        artist_dict =track.get('artist', {})
+        song_name=track.get('name', None)
+        artist_name =  artist_dict.get('name', None)
 
         # the song name or artist name are missing skip, else store the data 
-        if song_name != 'N/A' and artist_name!='N/A':
+        if song_name  and artist_name:
             data['song_name']= normalize_str(song_name)
             data['artist_name'] = normalize_str(artist_name)
         else:
             return None
-
-        data['rank']= track['rank']
-        data['duration_seconds']= int(track['duration'])
-        data['num_song_listeners']= int(track['num_song_listeners'])
+        data['num_song_listeners']= int(track.get('num_song_listeners',0))
 
         #handle missing values in song_id
-        song_id= normalize_str(track['song_id'])
-        if song_id == 'n/a':
+        song_id= normalize_str(track.get('song_id', None))
+        if not song_id :
             data['song_id'] = str(uuid.uuid4())
         else:
             data['song_id']= song_id  
-
-        data['song_url']=normalize_str(track['song_url'])
-        data['artist_id']= normalize_str(artist_dict['artist_id'])
-        data['artist_url']= artist_dict['artist_url']
+        data['song_url']=normalize_str(track.get('song_url', None))
+        data['artist_id']= normalize_str(artist_dict.get('artist_id', None))
+        data['artist_url']= artist_dict.get('artist_url',None)
         data['album_title'] = normalize_str(track['album_title'])
         
         # Validate tags is a list before iterating
@@ -115,7 +76,7 @@ def transform_data(track):
             logging.warning(f"Tags is not a list for {track.get('name', 'Unknown')}, using empty list")
             tags = []
         data['tags']=[normalize_str(tag)for tag in tags]
-        
+
         # Validate similar_artists is a list before iterating
         similar_artists = artist_dict.get('similar_artists', [])
         if not isinstance(similar_artists, list):
@@ -123,18 +84,16 @@ def transform_data(track):
             similar_artists = []
         data['similar_artists']= [normalize_str(artist) for artist in similar_artists]
         data['on_tour']= bool(int(track['artist']['on_tour']))
-    
-
         data['artist_total_playcount']= int(artist_dict['stats']['artist_total_playcount'])
         data['artist_total_listeners']= int(artist_dict['stats']['artist_total_listeners'])
-        data['duration_minutes'] = round((data['duration_seconds']/60),2)
         #division safety check
         listeners = data.get('artist_total_listeners',1)
         data['plays_per_listener']= round(data['artist_total_playcount']/listeners,5)
         data['engagement_ratio'] = round(data['num_song_listeners'] / listeners,5)
         data['source']= 'Lastfm'
         logging.info("Transformation is finished for %s", track['name'])
-        
+
+    #Spotify Data
     elif track['source']=='Spotify':
         data['album_type']= str(track['album_type'])
         data['is_playable']= bool(track['is_playable'])
@@ -156,8 +115,10 @@ def transform_data(track):
         data['artist_id']= str(get_artist_id(data['artist_name'],'N/A',artist_id_dict,'artist_id.json'))
         data['source']= 'Spotify'
         print(data)
+
+
+    #audio feature data
     elif track['source']== 'preview_url':
-        
         data['song_name'] = track.get('name', None)
         data['artist_id'] = track.get('artist_id', None)
         if not data['song_name'] or not data['artist_id']:
@@ -168,13 +129,11 @@ def transform_data(track):
         data['energy']= round(float(track.get('energy', 0)),5)
         data['zero_crossing_rate']= round(float(track.get('zero_crossing_rate', 0)),5)
         data['spectral_centroid'] = round(float(track.get('spectral_centroid', 0)),3)
+        tempo_normalized= min(data['bpm']/200, 1.0)
+        data['danceability'] = round((tempo_normalized*.3)+(data['energy']*.5)+(data['zero_crossing_rate']*.2),5)
         data['preview_url'] = str(track.get('preview_url', None)).strip()
         data['harmonic_ratio']= round(float(track.get('harmonic_ratio', 0)),5)
         data['percussive_ratio']=round(float(track.get('percussive_ratio', 0)),5)
-
-
-        tempo_normalized= min(data['bpm']/200, 1.0)
-        data['danceability'] = round((tempo_normalized*.3)+(data['energy']*.5)+(data['zero_crossing_rate']*.2),5)
         data['source']= track.get('source', 'preview_url')
         print(data)
     return data
@@ -196,8 +155,8 @@ if __name__=='__main__':
     logging.info("Starting continuous transform process")
     
     try:
-        consumer = Consumer(consumer_config)
-        producer = Producer(producer_config)
+        consumer = create_consumer('music-streaming-consumer_2')
+        producer = create_producer('music-transform-producer')
 
         message_count = 0
         batch_size = 1
@@ -229,20 +188,16 @@ if __name__=='__main__':
                     print(f'Validation Error: {e}')
                     continue
             
-            producer.produce(
-                topic= 'music_transformed',
-                key= data['song_id'],
-                value= json.dumps(data)
-            )
+            send_through_kafka(data, 'music_transformed', producer)
             message_count += 1
             
             # Batch flush for efficiency
             if message_count % batch_size == 0:
-                producer.flush()
+                flush_kafka_producer(producer)
                 logging.info(f"Flushed {message_count} messages to Kafka")
         
         # Final flush for remaining messages
-        producer.flush()
+        flush_kafka_producer(producer)
         logging.info(f"Transform complete. Total messages sent: {message_count}")
 
     finally:

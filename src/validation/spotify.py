@@ -1,5 +1,5 @@
-from pydantic import ValidationError, BaseModel, Field, field_validator, model_validator
-from typing import List
+from pydantic import BaseModel, field_validator, model_validator
+
 
 
 

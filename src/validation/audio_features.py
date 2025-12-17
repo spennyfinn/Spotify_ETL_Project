@@ -1,10 +1,11 @@
 
-from pydantic import ValidationError, BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 import math
 
 class audio_features(BaseModel):
     song_name: str
     artist_id: str
+    song_id: str
     bpm: float
     energy: float
     spectral_centroid: float
@@ -13,6 +14,7 @@ class audio_features(BaseModel):
     preview_url: str
     harmonic_ratio:float
     percussive_ratio:float
+    source:str
 
 
     @field_validator('energy', 'zero_crossing_rate', 'danceability', 'harmonic_ratio', 'percussive_ratio')
@@ -26,7 +28,7 @@ class audio_features(BaseModel):
         return float(value)
             
 
-    @field_validator('song_name', 'artist_id')
+    @field_validator('song_name', 'artist_id', 'source', 'song_id')
     def ensure_string(cls, value, info):
         if isinstance(value, str ):
             return value.strip().lower()
