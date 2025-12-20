@@ -19,3 +19,4 @@ flatten-json>=0.1.13
 # Spotify API wrapper
 spotipy>=2.23.0
 
+musicbrainzngs>=0.7.1

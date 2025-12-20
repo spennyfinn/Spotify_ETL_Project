@@ -4,6 +4,9 @@ import os
 
 
 def get_db():
+    '''
+    Connects to a SQL database using environment variables
+    '''
     conn = psycopg2.connect(
         dbname= os.getenv("DB_NAME"),
         user= os.getenv('DB_USER'),
