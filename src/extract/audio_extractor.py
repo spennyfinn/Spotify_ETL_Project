@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+import psycopg2
 from spotify_preview_finder import finder
 import librosa
 import requests
@@ -11,7 +12,15 @@ from src.utils.database import get_db
 
 load_dotenv()
 
-def get_songs_and_artists(cur):
+def get_songs_and_artists(cur:psycopg2.cursor)-> list:
+    '''
+    Retrieves song name, artist name, artist_id, and song_id from the database
+
+    Args:
+        cur (psycopg2.cursor): cursor object 
+    Returns
+        list: a list of tuples (song_name, artist_name, artist_id, song_id ) or None if the database is empty
+    '''
     cur.execute('SELECT song_name, artist_name, s.artist_id, s.song_id '  
                 'FROM songs AS s JOIN artists AS a ' 
                 'ON a.artist_id = s.artist_id '
@@ -22,9 +31,10 @@ def get_songs_and_artists(cur):
 
 
 def get_audio_features(song_name, artist_name, artist_id, song_id):
+    
     my_finder = finder
     search_query = f"{song_name} {artist_name}"
-    print(f'song IDDDDD:{song_id}')
+    print(f'Song ID:{song_id}')
     # Check what methods are available
     result = my_finder.search_and_get_links(song_name=search_query, client_id=os.getenv('SPOTIFY_CLIENT_ID'), client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"), limit=1)
     preview_url = result['results'][0]['previewUrl']

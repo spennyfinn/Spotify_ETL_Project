@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import logging
 from src.utils.database import get_db
 from src.utils.kafka_utils import consume_message, create_consumer
-from src.load.parsers import parse_audio_features_data, parse_insert_message, parse_spotify_message
+from src.load.parsers import parse_audio_features_data, parse_lastfm_message, parse_spotify_message
 
 
 load_dotenv()
@@ -24,25 +24,28 @@ logging.basicConfig(
 # -------------------------------
 # SQL Queries
 # -------------------------------
-lastfm_song_query = ("INSERT INTO songs(song_name,song_listeners, album_id, artist_id, song_url,engagement_ratio) "
-                 "VALUES (%s, %s, %s, %s, %s, %s) "
-                 "ON CONFLICT (song_name, artist_id) DO UPDATE "
+lastfm_song_query = ("INSERT INTO songs(song_name,song_id, song_listeners, artist_id, song_url,mbid,engagement_ratio) "
+                 "VALUES (%s, %s, %s, %s, %s, %s,%s) "
+                 "ON CONFLICT (song_name, artist_id) DO UPDATE SET "
                  "song_listeners = EXCLUDED.song_listeners,"
                  "engagement_ratio = EXCLUDED.engagement_ratio;")
                  
-lastfm_artist_query = ("INSERT INTO artists(artist_id,artist_name, artist_url, on_tour, total_listeners, total_playcount, plays_per_listener) "
-            "VALUES (%s,%s, %s, %s, %s, %s, %s) "
+lastfm_artist_query = ("INSERT INTO artists(artist_name,artist_id, on_tour, total_listeners, total_playcount, plays_per_listener) "
+            "VALUES (%s,%s, %s, %s, %s, %s) "
             "ON CONFLICT (artist_id) DO UPDATE "
             "SET on_tour = EXCLUDED.on_tour, "
             "total_listeners = EXCLUDED.total_listeners,"
             "total_playcount = EXCLUDED.total_playcount,"
             "plays_per_listener=EXCLUDED.plays_per_listener;")
-lastfm_album_query = ("INSERT INTO albums(album_id, album_title, artist_name) "
+
+
+'''lastfm_album_query = ("INSERT INTO albums(album_id, album_title, artist_name) "
             "VALUES (%s,%s, %s) "
             "ON CONFLICT (album_title, artist_name) DO UPDATE "
             "SET album_id = EXCLUDED.album_id " \
             "RETURNING album_id; "
             )
+
 lastfm_tags_query = ("INSERT INTO tags(song_name,artist_id,tag) "
             "VALUES (%s,%s, %s) "
             "ON CONFLICT (song_name, artist_id,tag) DO NOTHING; "
@@ -50,10 +53,10 @@ lastfm_tags_query = ("INSERT INTO tags(song_name,artist_id,tag) "
 lastfm_similar_artist_query =("INSERT INTO similar_artists(artist_name, similar_artist_name) "
             "VALUES (%s, %s) "
             "ON CONFLICT (artist_name, similar_artist_name) DO NOTHING ;"
-            )
+            )'''
 
-spotify_song_query=('INSERT INTO songs(song_name, artist_id, duration_ms, duration_seconds, duration_minutes, release_date, release_date_precision, is_explicit, popularity, track_number, song_id) '
-                   'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s) ' \
+spotify_song_query=('INSERT INTO songs(song_name, artist_id, duration_ms, duration_seconds, duration_minutes, release_date, release_date_precision, is_explicit, popularity, track_number, song_id, album_id) '
+                   'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s, %s) ' \
                    'ON CONFLICT ON CONSTRAINT songs_pkey '
                    'DO UPDATE ' \
                     'SET duration_seconds = EXCLUDED.duration_seconds,' \
@@ -106,10 +109,11 @@ if __name__=='__main__':
         success_count=0
         errors_count = 0
 
-        for message in consume_message(consumer, 'music_transformed'):
-            
+        for message in consume_message(consumer, ['music_transformed']):
+           
+            message= message[1]
             if message['source']== 'Lastfm':
-                song, artist, album, tags, similar_artists  = parse_insert_message(message)
+                song, artist  = parse_lastfm_message(message)
                 song_name = song[0]
                 artist_name = artist[1]
                 
@@ -117,27 +121,11 @@ if __name__=='__main__':
                     # Insert artist and album first
                     cur.execute(lastfm_artist_query, artist)
                     logging.info(f"Artist loaded/updated: {artist_name}")
-                    
-                    cur.execute(lastfm_album_query, album)
-                    result = cur.fetchone()
-                    if result:
-                        album_id = result[0]
-                        logging.info(f"sAlbum loaded/updated: {album[1]} by {artist_name} (ID: {album_id})")
-                    else:
-                        cur.execute("SELECT album_id FROM albums WHERE album_title=%s AND artist_name = %s",
-                                    (album[1], album[2]))  # album_title is at index 1, artist_name at index 2
-                        album_result = cur.fetchone()
-                        if not album_result:
-                            logging.error(f"Album not found: {album[1]} by {album[2]}")
-                            errors_count += 1
-                            continue
-                        album_id = album_result[0]
-                        logging.info(f"Album retrieved: {album[1]} by {artist_name} (ID: {album_id})")
-                    song[6]=album_id
-                except Exception as e:
-                    logging.error(f"Failed to load artist/album for {song_name} by {artist_name}: {e}")
+                except psycopg2.IntegrityError as e:
+                    logging.error(f"Failed to load {artist_name}: {e}")
                     errors_count += 1
-                    continue
+                    raise 
+                    
                 
                 # Insert the song 
                 try:
@@ -146,29 +134,7 @@ if __name__=='__main__':
                 except psycopg2.IntegrityError as e:
                         logging.error(f"Failed to load song {song_name} by {artist_name}: {e}")
                         errors_count += 1
-                        raise
-                
-                # Insert tags
-                tags_inserted = 0
-                for tag in tags:
-                    try:
-                        cur.execute(lastfm_tags_query, tag)
-                        tags_inserted += 1
-                    except Exception as e:
-                        logging.warning(f"Failed to insert tag '{tag[2]}' for {song_name}: {e}")
-                if tags_inserted > 0:
-                    logging.info(f"Inserted {tags_inserted} tag(s) for {song_name}")
-                
-                # Insert similar artists
-                similar_inserted = 0
-                for similar_artist in similar_artists:
-                    try:
-                        cur.execute(lastfm_similar_artist_query, similar_artist)
-                        similar_inserted += 1
-                    except Exception as e:
-                        logging.warning(f"Failed to insert similar artist '{similar_artist[1]}' for {artist_name}: {e}")
-                if similar_inserted > 0:
-                    logging.info(f"Inserted {similar_inserted} similar artist(s) for {artist_name}")
+                        raise 
                 
                 lastfm_count += 1
 

@@ -3,54 +3,30 @@ import uuid
 
 
 
-def parse_insert_message(data):
-        """
-    Parse a transformed track message into rows for different database tables.
-
-    Args:
-        data (dict): Transformed music track data
-
-    Returns:
-        Tuple containing:
-            song_row (list)
-            artist_row (list)
-            album_row (list)
-            tag_rows (list of lists)
-            similar_artist_rows (list of lists)
-    """
-       
-        song_row=[
-            data['song_name'],
-            data['song_id'],
-            data['num_song_listeners'],
-            "",
-            data['artist_id'],
-            data['song_url'],
-            data['engagement_ratio']
+def parse_lastfm_message(data):
+    song=[
+        data['song_name'],
+        data['song_id'],
+        data['num_song_listeners'],
+        data['artist_id'],
+        data['song_url'], 
+        data['mbid'],
+        data['engagement_ratio'],
         ]
+    artist=[
+        data['artist_name'],
+        data['artist_id'],
+        data['on_tour'],
+        data['artist_total_listeners'],
+        data['artist_total_playcount'],
+        data['plays_per_listener']
 
-        artist_row=[
-            data['artist_id'],
-            data['artist_name'] ,
-            data['artist_url'],
-            data['on_tour'] ,
-            data['artist_total_listeners'] ,
-            data['artist_total_playcount'] ,
-            data['plays_per_listener'] 
         ]
-
-        album_row=[
-            str(uuid.uuid4()),
-            data['album_title'],
-            data['artist_name']
-        ]
+    return song,artist
 
 
-        tag_rows = [[data['song_name'], data['artist_id'], tag] for tag in data['tags']]
-        
-        similar_artist_rows = [[data['artist_name'], sim] for sim in data['similar_artists']]
 
-        return song_row, artist_row, album_row, tag_rows, similar_artist_rows
+
 
 def parse_spotify_message(data):
     song=[
@@ -64,7 +40,8 @@ def parse_spotify_message(data):
         data['is_explicit'],
         data['popularity'],
         data['track_number'],
-        data['song_id']
+        data['song_id'],
+        data['album_id']
     ]
     album=[
         data['album_title'],

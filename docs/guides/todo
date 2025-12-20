@@ -1,13 +1,24 @@
 
-fix the dictionary indexing and replace with get
+
 remove tables tags and artists alike
-redo lastfm extraction
+
+
+
+
 
 
 current:
-reworking the lastfm extraction logic to extract only data tjat is missing from spotify
+loading lastfm data
+  
+    
 
 
 
 done:
 new extractor: get new releases from spotify endpoint: GET https://api.spotify.com/v1/browse/new
+redo the send_through kafka to make different ids
+reworking the lastfm extraction logic to extract only data tjat is missing from spotify
+rework validation for lastfm
+error hanfling for spotify transfrom
+reworking transform function into modular functions
+fix the dictionary indexing and replace with get in lastfm extraction

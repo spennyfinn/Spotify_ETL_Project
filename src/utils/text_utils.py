@@ -2,7 +2,7 @@ import re
 from difflib import SequenceMatcher
 
 
-def normalize_song_name(name):
+def normalize_song_name(name:str):
     """
     Normalize song name by removing extra formatting for comparison.
     
@@ -14,10 +14,13 @@ def normalize_song_name(name):
     """
     if not name:
         return ""
-    base_name = re.sub(r'\s*\([^)]*\)', '', name)
+    base_name = name.replace('&', 'and')
+    base_name = base_name.replace('feat.', 'featuring')
+    base_name = base_name.replace('ft.', 'featuring')
+    base_name = re.sub(r'\s*\([^)]*\)', '', base_name)
     base_name = re.sub(r'\s*\[[^\]]*\]', '', base_name)
     base_name = re.sub(r'\s*feat\.?\s*.*$', '', base_name, flags=re.IGNORECASE)
-    base_name = re.sub(r'\s*ft\.?\s*.*$', '', base_name, flags=re.IGNORECASE)
+    base_name = re.sub(r'\s+\b(?:ft|feat)\.?\s*.*$', '', base_name, flags=re.IGNORECASE)
     base_name = re.sub(r'\s*\+\s*.*$', '', base_name)
     return base_name.strip().lower()
 
@@ -75,18 +78,3 @@ def similarity_score(str1, str2):
     return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
 
 
-
-def normalize_str(string:str)-> str:
-    '''
-    Normalizes a string to all lowercase characters and removes whitespace
-
-    Args:
-        string (string): A string to format
-    
-    Returns:
-        string: a lowercase string without whitespace
-    '''
-    if not string:
-        return ""
-    else:
-        return str(string).lower().strip()
