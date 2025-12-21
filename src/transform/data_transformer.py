@@ -76,7 +76,7 @@ def transform_spotify_data(track):
     data['duration_ms']= safe_int(track.get('duration_ms', 0))
     if data['duration_ms']>0:
         data['duration_seconds']= safe_int(data['duration_ms']//1000)
-        data['duration_minutes']= round(safe_float(data['duration_seconds']/60,2))
+        data['duration_minutes']= round(safe_float(data['duration_seconds']/60),2)
     data['song_id']= safe_string(track.get('song_id', None))
     
     data['source']= 'Spotify'

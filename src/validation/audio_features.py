@@ -17,9 +17,12 @@ class audio_features(BaseModel):
     source:str
 
 
+
     @field_validator('energy', 'zero_crossing_rate', 'danceability', 'harmonic_ratio', 'percussive_ratio')
     def validate_zero_to_one(cls, value, info):
-        if  not isinstance(value, float):
+        if not value:
+            raise ValueError(f"{info.field_name} cannot be NULL")
+        if not isinstance(value, float):
             raise TypeError(f'{info.field_name} should be of type float but is of type: {type(value)}')
         if math.isnan(value) or math.isinf(value):
             raise ValueError(f'{info.field_name} cannot be NaN or Infinity')
@@ -30,6 +33,8 @@ class audio_features(BaseModel):
 
     @field_validator('song_name', 'artist_id', 'source', 'song_id')
     def ensure_string(cls, value, info):
+        if not value:
+            raise ValueError(f"{info.field_name} cannot be NULL")
         if isinstance(value, str ):
             return value.strip().lower()
         else:
@@ -37,6 +42,8 @@ class audio_features(BaseModel):
 
     @field_validator('bpm')
     def validate_bpm(cls, value, info):
+        if not value:
+            raise ValueError(f"{info.field_name} cannot be NULL")
         if not isinstance(value, float):
             raise TypeError(f"{info.field_name} should be of type float but is of type: {type(value)}")
         if math.isnan(value) or math.isinf(value):
@@ -47,6 +54,8 @@ class audio_features(BaseModel):
 
     @field_validator('spectral_centroid')
     def validate_spectral_centroid(cls, value, info):
+        if not value:
+            raise ValueError(f"{info.field_name} should not be NULL")
         if not isinstance(value, float):
             raise TypeError(f"{info.field_name} should be of type float but is of type: {type(value)}")
         if math.isnan(value) or math.isinf(value):

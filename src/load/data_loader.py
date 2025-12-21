@@ -27,7 +27,8 @@ logging.basicConfig(
 lastfm_song_query = ("INSERT INTO songs(song_name,song_id, song_listeners, artist_id, song_url,mbid,engagement_ratio) "
                  "VALUES (%s, %s, %s, %s, %s, %s,%s) "
                  "ON CONFLICT (song_name, artist_id) DO UPDATE SET "
-                 "song_listeners = EXCLUDED.song_listeners,"
+                 "song_listeners = EXCLUDED.song_listeners, "
+                 "song_url = EXCLUDED.song_url, "
                  "engagement_ratio = EXCLUDED.engagement_ratio;")
                  
 lastfm_artist_query = ("INSERT INTO artists(artist_name,artist_id, on_tour, total_listeners, total_playcount, plays_per_listener) "
@@ -38,8 +39,8 @@ lastfm_artist_query = ("INSERT INTO artists(artist_name,artist_id, on_tour, tota
             "total_playcount = EXCLUDED.total_playcount,"
             "plays_per_listener=EXCLUDED.plays_per_listener;")
 
-
-'''lastfm_album_query = ("INSERT INTO albums(album_id, album_title, artist_name) "
+'''
+lastfm_album_query = ("INSERT INTO albums(album_id, album_title, artist_name) "
             "VALUES (%s,%s, %s) "
             "ON CONFLICT (album_title, artist_name) DO UPDATE "
             "SET album_id = EXCLUDED.album_id " \
@@ -126,6 +127,8 @@ if __name__=='__main__':
                     errors_count += 1
                     raise 
                     
+               
+                    
                 
                 # Insert the song 
                 try:
@@ -142,10 +145,11 @@ if __name__=='__main__':
             elif message['source']=='Spotify':
                 song, album, artist= parse_spotify_message(message)
                 song_name = song[0]
-                artist_name = album[1]
+                artist_name=artist[1]
 
+            
                 # Add this debug logging:
-                logging.info(f"DEBUG - Song data: song_name='{song[0]}', artist_id='{song[1]}', song_id='{song[10]}'")
+                logging.info(f"DEBUG - Song data: song_name='{song[0]}', artist_id='{song[1]}', song_id='{song[10]}, album_id='{album[4]}'")
                 if not song[0] or not song[1]:
                     logging.error(f"NULL values detected: song_name={song[0]}, artist_id={song[1]}")
                     continue
@@ -153,6 +157,8 @@ if __name__=='__main__':
                 try:
                     cur.execute(spotify_artist_query, artist)
                     logging.info(f'Spotify artist data inserted: {song_name} by {artist_name}')
+                    cur.execute(spotify_album_query, album)
+                    logging.info(f'Spotify artist data inserted: {album[0]} by {artist_name} for {song_name}')
                     cur.execute(spotify_song_query, song)
                     logging.info(f"Spotify song data inserted: {song_name} by {artist_name}")
                 except Exception as e:
@@ -162,21 +168,12 @@ if __name__=='__main__':
                 
                 # Try to insert/update album, handling potential album_id conflicts
                 try:
-                    cur.execute(spotify_album_query, album)
+                    
                     logging.info(f"✓ Spotify album data inserted: {album[0]} by {artist_name}")
                 except psycopg2.IntegrityError as e:
-                    if 'albums_pkey' in str(e) or 'album_id' in str(e):
-                        # Album_id already exists - update by title/artist without changing album_id
-                        cur.execute("""
-                            UPDATE albums 
-                            SET album_type = %s, album_total_tracks = %s
-                            WHERE album_title = %s AND artist_name = %s
-                        """, (album[2], album[3], album[0], album[1]))
-                        logging.info(f"✓ Spotify album data inserted (conflict resolved): {album[0]} by {artist_name}")
-                    else:
-                        logging.error(f"Failed to insert Spotify album data for {album[0]} by {artist_name}: {e}")
-                        errors_count += 1
-                        raise
+                    logging.error(f"Failed to insert Spotify album data for {album[0]} by {artist_name}: {e}")
+                    errors_count += 1
+                    raise
                 
                 spotify_count += 1
             elif message['source']=='preview_url':
