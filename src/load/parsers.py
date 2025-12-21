@@ -13,6 +13,7 @@ def parse_lastfm_message(data):
         data['mbid'],
         data['engagement_ratio'],
         ]
+    print(song)
     artist=[
         data['artist_name'],
         data['artist_id'],
@@ -53,7 +54,6 @@ def parse_spotify_message(data):
     artist = [
         data['artist_id'],
         data['artist_name']
-    
     ]
 
     return song, album, artist

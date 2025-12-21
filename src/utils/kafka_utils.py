@@ -119,7 +119,14 @@ def send_through_kafka(track:dict, topic_name:str, producer:Producer):
             producer.produce(topic= topic_name, key=track['artist_name'], value=track_json)
             print(f"Message queued: {track['song_name']} through {topic_name}")
         except Exception as e:
-            print(f"Failed to send track {track['name']}: {e}")
+            print(f"Failed to send track {track['song_name']}: {e}")
+            return
+    elif topic_name == 'music_audio_features':
+        try:
+            producer.produce(topic=topic_name, key=track['song_id'], value=track_json)
+            print(f'Message queued: {track['name']} through {topic_name}')
+        except Exception as e:
+            print(f'Failed to send track {track['name']}: {e}')
             return
     else:
         print(f'Unknown topic_name: {topic_name}')
