@@ -1,28 +1,28 @@
 
+import string
 from pydantic import BaseModel, field_validator, model_validator
 import math
+from typing import Any
 
-class audio_features(BaseModel):
-    song_name: str
-    artist_id: str
-    song_id: str
-    bpm: float
-    energy: float
-    spectral_centroid: float
-    zero_crossing_rate: float
-    danceability: float
-    preview_url: str
-    harmonic_ratio:float
-    percussive_ratio:float
-    source:str
+class AudioFeatures(BaseModel):
+    song_name: Any
+    artist_id: Any
+    song_id: Any
+    bpm: Any
+    energy: Any
+    spectral_centroid: Any
+    zero_crossing_rate: Any
+    danceability: Any
+    preview_url: Any
+    harmonic_ratio:Any
+    percussive_ratio:Any
+    source: str
 
 
 
     @field_validator('energy', 'zero_crossing_rate', 'danceability', 'harmonic_ratio', 'percussive_ratio')
     def validate_zero_to_one(cls, value, info):
-        if not value:
-            raise ValueError(f"{info.field_name} cannot be NULL")
-        if not isinstance(value, float):
+        if type(value) is not float:
             raise TypeError(f'{info.field_name} should be of type float but is of type: {type(value)}')
         if math.isnan(value) or math.isinf(value):
             raise ValueError(f'{info.field_name} cannot be NaN or Infinity')
@@ -31,33 +31,41 @@ class audio_features(BaseModel):
         return float(value)
             
 
-    @field_validator('song_name', 'artist_id', 'source', 'song_id')
-    def ensure_string(cls, value, info):
-        if not value:
-            raise ValueError(f"{info.field_name} cannot be NULL")
-        if isinstance(value, str ):
-            return value.strip().lower()
-        else:
-            raise TypeError(f"{info.field_name} should be of type string but is of type: {type(value)}")
+    @field_validator('song_name')
+    def validate_name(cls, value, info):
+        if type(value) is not str:
+            raise TypeError(f'{info.field_name} should be of type str but is of type: {type(value)}')
+        stripped= value.strip()
+        if len(stripped)==0:
+            raise ValueError(f"{info.field_name} cannot be an empty string or whitespace: {value}")
+        return stripped.lower()
+
+    @field_validator('artist_id', 'song_id')
+    def validate_ids(cls, value, info):
+        if type(value) is not str:
+            raise TypeError(f'{info.field_name} should be of type str but is of type: {type(value)}')
+        stripped= value.strip()
+        if len(value)!=22:
+            raise ValueError(f'{info.field_name} should be exactly 22 characters but received: {len(stripped)} chars')
+        base64= string.ascii_letters+string.digits
+        if not all(c in base64 for c in stripped):
+            raise ValueError(f'{info.field_name} should only contain base64 characters: {value}')
+        return stripped
 
     @field_validator('bpm')
     def validate_bpm(cls, value, info):
-        if not value:
-            raise ValueError(f"{info.field_name} cannot be NULL")
-        if not isinstance(value, float):
-            raise TypeError(f"{info.field_name} should be of type float but is of type: {type(value)}")
+        if type(value) is not float:
+            raise TypeError(f'{info.field_name} should be of type float but is of type: {type(value)}')
         if math.isnan(value) or math.isinf(value):
             raise ValueError(f'{info.field_name} cannot be NaN or Infinity')
-        if value < 30 or value > 300:
+        if value < 30 or value > 200:
             raise ValueError(f'{info.field_name} should be within range 30 - 300, but got: {value}')
         return float(value)
 
     @field_validator('spectral_centroid')
     def validate_spectral_centroid(cls, value, info):
-        if not value:
-            raise ValueError(f"{info.field_name} should not be NULL")
-        if not isinstance(value, float):
-            raise TypeError(f"{info.field_name} should be of type float but is of type: {type(value)}")
+        if type(value) is not float:
+            raise TypeError(f'{info.field_name} should be of type float but is of type: {type(value)}')
         if math.isnan(value) or math.isinf(value):
             raise ValueError(f'{info.field_name} cannot be NaN or Infinity')
         if value < 0 or value > 10000:
@@ -68,13 +76,16 @@ class audio_features(BaseModel):
 
     @field_validator('preview_url')
     def validate_url(cls, value, info):
-        if not isinstance(value, str):
-            raise TypeError(f"{info.field_name} should be of type string but is of type: {type(value)}")
-        if not value.strip():
+        if type(value) is not str:
+            raise TypeError(f'{info.field_name} should be of type str but is of type: {type(value)}')
+        stripped= value.strip()
+        if len(stripped)==0:
             raise ValueError(f"{info.field_name} cannot be empty")
-        if not (value.strip().startswith('https://') or value.strip().startswith('http://')):
+        if not (stripped.startswith('https://') or stripped.startswith('http://')):
             raise ValueError(f"{info.field_name} should be a valid url starting with https:// or http://")
-        return value.strip()
+        return stripped
+
+
 
         
 
@@ -87,6 +98,9 @@ class audio_features(BaseModel):
                 f'Danceability calculation mismatch: '
                 f'Expexted Danceability: {expected_danceability}, recieved {model.danceability}')
         return model
+    
+
+
 
 
 

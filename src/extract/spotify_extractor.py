@@ -40,7 +40,7 @@ def extract_main_spotify_data(general_queries):
                 print(f"JSON decode error for query '{query}' offset {offset}")
                 continue
 
-    
+            
             data_list= extract_spotify_data(data)
             all_data.extend(data_list)
 
@@ -49,7 +49,6 @@ def extract_main_spotify_data(general_queries):
         print(f"Total Tracks Extracted: {len(all_data)} ")
         return all_data
             
-
 
 
             

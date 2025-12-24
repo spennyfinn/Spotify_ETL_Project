@@ -1,0 +1,4 @@
+# file: /Users/spennyfinn/Documents/Projects/music_streaming_pipeline/src/utils/text_utils.py
+# hypothesis_version: 6.148.8
+
+['&', '+', ',', '\\s*\\([^)]*\\)', '\\s*\\+\\s*.*$', '\\s*\\[[^\\]]*\\]', '\\s*feat\\.?\\s*.*$', 'and', 'feat', 'feat.', 'featuring', 'ft.']

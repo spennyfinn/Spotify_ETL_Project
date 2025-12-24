@@ -1,5 +1,4 @@
 from librosa import ex
-from pandas.core.config_init import data_manager_doc
 import requests
 import os
 import json
@@ -38,7 +37,7 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
     except ConnectionError as e:
         print(f"Connection error for {song_name} by {artist_name}: {e}")
         return None
-
+    
     #parse results
     results = data.get('results', {})
     trackmatches= results.get('trackmatches', {})
