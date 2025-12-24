@@ -2,7 +2,7 @@ import re
 from difflib import SequenceMatcher
 
 
-def normalize_song_name(name:str):
+def normalize_song_name(name):
     """
     Normalize song name by removing extra formatting for comparison.
     
@@ -12,8 +12,8 @@ def normalize_song_name(name:str):
     Returns:
         str: Normalized song name in lowercase
     """
-    if not name:
-        return ""
+    if type(name) is not str:
+        raise TypeError(f'song name must be a string but it is {type(name)}')
     base_name = name.replace('&', 'and')
     base_name = base_name.replace('feat.', 'featuring')
     base_name = base_name.replace('ft.', 'featuring')
@@ -34,6 +34,9 @@ def has_collaborators(name):
     Returns:
         bool: True if song has collaborators, False otherwise
     """
+    if type(name) is not str:
+        raise TypeError(f'song name must be a string but it is {type(name)}')
+
     name_lower = name.lower()
     return ('+' in name_lower or 
             'feat' in name_lower or 
@@ -50,6 +53,10 @@ def extract_collaborators(name):
     Returns:
         list: List of collaborator names found in the song name
     """
+
+    if type(name) is not str:
+        raise TypeError(f'The input should be a string but it is a(n) {type(name)}')
+    
     collaborators = []
     name_lower = name.lower()
     
@@ -58,9 +65,10 @@ def extract_collaborators(name):
         if len(parts) > 1:
             collaborators.extend([p.strip() for p in parts[1:]])
     
-    feat_match = re.search(r'(?:feat\.?|ft\.?|featuring)\s*([^\(\)\[\]]+)', name_lower)
+    feat_match = re.search(r'(?:featuring|feat\.?|ft\.?)\s*([^\(\)\[\]]+)', name_lower)
     if feat_match:
-        collaborators.append(feat_match.group(1).strip())
+        feat_text= feat_match.group(1).strip()
+        collaborators.extend([col.strip() for col in feat_text.split(',') if col.strip()])
     
     return collaborators
 
@@ -75,6 +83,10 @@ def similarity_score(str1, str2):
     Returns:
         float: Similarity score between 0 and 1
     """
+    if type(str1) is not str:
+        raise TypeError(f'{str1} is not a string, rather it is a(n) {type(str1)} ')
+    if type(str2) is not str:
+        raise TypeError(f'{str2} is not a string, rather it is a(n) {type(str2)} ')
     return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
 
 

@@ -1,8 +1,8 @@
 
 from kafka import producer
 from src.utils.kafka_utils import consume_message, create_consumer, create_producer, flush_kafka_producer, send_through_kafka
-from src.validation.audio_features import audio_features
-from src.validation.lastfm import Last_fm_data
+from src.validation.audio_features import AudioFeatures
+from src.validation.lastfm import LastFm
 from src.validation.spotify import Spotify_Data
 import logging
 from src.utils.transformer_utils import determine_missing_fields, safe_float, safe_int, safe_string
@@ -12,7 +12,7 @@ from src.utils.transformer_utils import determine_missing_fields, safe_float, sa
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
-
+release_date_precision_map={'4': 'year','7':'month', '10': 'day'}
 # -------------------------------
 # Transforming Functions
 # -------------------------------
@@ -70,6 +70,8 @@ def transform_spotify_data(track):
     data['release_date']= safe_string(track.get('release_date', None))
     if data['release_date']:
         data['release_date_precision']= safe_string(track.get('release_date_precision', None))
+        if not data['release_date_precision']:
+            data['release_date_precision']= release_date_precision_map[str(len(data['release_date']))]
     data['album_total_tracks'] = safe_int((track.get('album_total_tracks', 0)))
     data['track_number']= safe_int(track.get('track_number', 0))
     data['is_explicit']= bool(track.get('explicit', False))
@@ -128,13 +130,13 @@ if __name__=='__main__':
             if topic == 'lastfm_artist':
                 transformed_data= transform_lastfm_data(data)
                 if transformed_data:
-                   validated_data=Last_fm_data(**transformed_data)
+                   validated_data=LastFm(**transformed_data)
                 else:
                     continue
             elif topic =='music_audio_features':
                 transformed_data = transform_audio_features_data(data)
                 if transformed_data:
-                    validated_data= audio_features(**transformed_data)
+                    validated_data= AudioFeatures(**transformed_data)
                 else:
                     continue
             elif topic=='music_top_tracks':
