@@ -94,8 +94,8 @@ class Spotify_Data(BaseModel):
             return 0
         if type(value) is not int:
             raise TypeError(f'{info.field_name} should be a whole number, but got {type(value).__name__}')
-        if value < 0 or value > 100:
-            raise ValueError(f'{info.field_name} should be between 0 and 100 tracks')
+        if value < 0 or value > 1000:
+            raise ValueError(f'{info.field_name} should be between 0 and 1000 tracks')
         return int(value)
 
 
@@ -119,8 +119,8 @@ class Spotify_Data(BaseModel):
     def validate_track_number(cls, value, info):
         if type(value) is not int:
             raise TypeError(f'{info.field_name} should be a whole number, but got {type(value).__name__}')
-        if value < 0 or value > 100:
-            raise ValueError(f"{info.field_name} should be between 1 and 100 (got {value})")
+        if value < 0 or value > 1000:
+            raise ValueError(f"{info.field_name} should be between 1 and 1000 (got {value})")
         return int(value)
     
     @field_validator('duration_seconds')

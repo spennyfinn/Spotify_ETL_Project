@@ -10,20 +10,19 @@ import re
 
 
 def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
-    #normalize song and artist names
-    #print(f"SONG:{song_name} ARTIST:{artist_name}")
+
     song_name_normalized= normalize_song_name(song_name)
     artist_name_normalized=normalize_song_name(artist_name)
-    #print(f"SONG Norm:{song_name_normalized} ARTIST Norm:{artist_name_normalized}")
+   
 
     #define url parameters
     query = f"{song_name_normalized} {artist_name_normalized}"
-    
+    print(query)
     
     #call API with exception handling
     try:
         resp=requests.get(url=f'http://ws.audioscrobbler.com/2.0/?method=track.search&track={query}&api_key={key}&format=json&limit=5')
-        resp.raise_for_status()
+        print(resp.url)
         data=resp.json()
     except json.JSONDecodeError as e:
         print(f"There was an error when decoding th JSON for {song_name} by {artist_name}: {e}")
@@ -39,6 +38,7 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
         return None
     
     #parse results
+    print(data)
     results = data.get('results', {})
     trackmatches= results.get('trackmatches', {})
     tracks= trackmatches.get('track', [])
@@ -74,7 +74,7 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
             print(f"Artist score was too low to continue: {song_title} by {artist_title} with a score of {artist_score:.2f}")
             continue
         
-        #get the original artist from the db
+       
         original_artist = artist_name.lower().strip()
 
         #rerun similarity test on artist to perform error handing again
@@ -169,9 +169,7 @@ def match_artists_from_lastfm(track_data, key):
         return None
     
     #get other useful data and add to track_data
-    track_data['artist_id']=artist_id
     track_data['mbid']= artist.get('mbid', None)
-    track_data['url'] = artist.get('url', None)
     track_data['on_tour'] = artist.get('on_tour', 0)
     track_data['artist_listeners']=int(stats.get('listeners', 0))
     track_data['artist_playcount'] = int(stats.get('playcount',0))

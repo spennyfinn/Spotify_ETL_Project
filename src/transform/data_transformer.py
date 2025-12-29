@@ -35,8 +35,7 @@ def transform_lastfm_data(track):
     data['artist_name']=artist_name
     data['artist_id']= safe_string(track.get('artist_id', None))
     data['num_song_listeners']= num_song_listeners
-    data['mbid']= safe_string(track.get('mbid', None), lowercase=True)
-    data['song_url']= safe_string(track.get('url', None))
+    data['mbid']= safe_string(track.get('mbid', None), lowercase=False)
     data['on_tour']= bool(track.get('on_tour', False))
     data['artist_total_listeners']= artist_total_listeners
     data['artist_total_playcount']= artist_total_playcount
@@ -91,12 +90,11 @@ def transform_spotify_data(track):
 def transform_audio_features_data(track):
     '''Transform Audio Features data into standardized format'''
     data={}
-    data['song_name'] = safe_string(track.get('name', None))
-    data['artist_id'] = safe_string(track.get('artist_id', None))
-    if not data['song_name'] or not data['artist_id']:
-        print('Skipping this track due to the lack of a song_name or artist_name')
-        return None
     data['song_id']= safe_string(track.get('song_id', None))
+    if not data['song_id']:
+        print('Skipping this track due to the lack of a song_id')
+        return None
+    
     data['bpm']= round(safe_float(track.get('bpm', 0)),3)
     data['energy']= round(safe_float(track.get('energy', 0)),5)
     data['zero_crossing_rate']= round(safe_float(track.get('zero_crossing_rate', 0)),5)
@@ -104,8 +102,8 @@ def transform_audio_features_data(track):
     tempo_normalized= min(data['bpm']/200, 1.0)
     data['danceability'] = round(safe_float((tempo_normalized*.3)+(data['energy']*.5)+(data['zero_crossing_rate']*.2)),5)
     data['preview_url'] = safe_string(track.get('preview_url', None)).strip()
-    data['harmonic_ratio']= round(safe_float(track.get('harmonic_ratio', 0)),5)
-    data['percussive_ratio']=round(safe_float(track.get('percussive_ratio', 0)),5)
+    data['harmonic_ratio']= max(round(safe_float(track.get('harmonic_ratio', 0)),5),1.0)
+    data['percussive_ratio']=max(round(safe_float(track.get('percussive_ratio', 0)),5),1.0)
     data['source']= safe_string(track.get('source', 'preview_url'), default='preview_url')
     print(data)
     return data

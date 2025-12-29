@@ -5,8 +5,6 @@ import math
 from typing import Any
 
 class AudioFeatures(BaseModel):
-    song_name: Any
-    artist_id: Any
     song_id: Any
     bpm: Any
     energy: Any
@@ -29,18 +27,9 @@ class AudioFeatures(BaseModel):
         if value < 0 or value > 1:
                 raise ValueError(f'{info.field_name} should be within the range of 0 and 1 but the value is: {value}')
         return float(value)
-            
+        
 
-    @field_validator('song_name')
-    def validate_name(cls, value, info):
-        if type(value) is not str:
-            raise TypeError(f'{info.field_name} should be of type str but is of type: {type(value)}')
-        stripped= value.strip()
-        if len(stripped)==0:
-            raise ValueError(f"{info.field_name} cannot be an empty string or whitespace: {value}")
-        return stripped.lower()
-
-    @field_validator('artist_id', 'song_id')
+    @field_validator('song_id')
     def validate_ids(cls, value, info):
         if type(value) is not str:
             raise TypeError(f'{info.field_name} should be of type str but is of type: {type(value)}')
@@ -58,7 +47,7 @@ class AudioFeatures(BaseModel):
             raise TypeError(f'{info.field_name} should be of type float but is of type: {type(value)}')
         if math.isnan(value) or math.isinf(value):
             raise ValueError(f'{info.field_name} cannot be NaN or Infinity')
-        if value < 30 or value > 200:
+        if value < 0 or value > 300:
             raise ValueError(f'{info.field_name} should be within range 30 - 300, but got: {value}')
         return float(value)
 

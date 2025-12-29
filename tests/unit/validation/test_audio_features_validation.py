@@ -3,56 +3,9 @@ import pytest
 from src.validation.audio_features import AudioFeatures
 import numpy as np
 
-from tests.unit.constants import EMPTY_STRINGS, EMPTY_STRINGS_IDS, INVALID_0_1_RANGE_VALUES, INVALID_0_1_RANGE_VALUES_IDS, INVALID_ID_IDS, INVALID_IDS, INVALID_SPECTRAL_CENTROID_VALUES, INVALID_SPECTRAL_CENTROID_VALUES_IDS, INVALID_URL_VALUES, INVALID_URL_VALUES_IDS, VALID_0_1_RANGE_VALUES, VALID_0_1_RANGE_VALUES_IDS, VALID_AUDIO_FEATURE_FLOATS, VALID_AUDIO_FEATURE_FLOATS_IDS, VALID_ID_VALUES, VALID_ID_VALUES_IDS, VALID_SONG_NAMES, VALID_SONG_NAMES_IDS, VALID_SPECTRAL_CENTROID_VALUES, VALID_SPECTRAL_CENTROID_VALUES_IDS, VALID_URL_VALUES, VALID_URL_VALUES_IDS, WRONG_FLOAT_TYPE, WRONG_FLOAT_TYPE_IDS, WRONG_STRING_TYPE, WRONG_STRING_TYPE_IDS
+from tests.unit.constants import  INVALID_0_1_RANGE_VALUES, INVALID_0_1_RANGE_VALUES_IDS, INVALID_ID_IDS, INVALID_IDS, INVALID_SPECTRAL_CENTROID_VALUES, INVALID_SPECTRAL_CENTROID_VALUES_IDS, INVALID_URL_VALUES, INVALID_URL_VALUES_IDS, VALID_0_1_RANGE_VALUES, VALID_0_1_RANGE_VALUES_IDS, VALID_AUDIO_FEATURE_FLOATS, VALID_AUDIO_FEATURE_FLOATS_IDS, VALID_ID_VALUES, VALID_ID_VALUES_IDS, VALID_SPECTRAL_CENTROID_VALUES, VALID_SPECTRAL_CENTROID_VALUES_IDS, VALID_URL_VALUES, VALID_URL_VALUES_IDS, WRONG_FLOAT_TYPE, WRONG_FLOAT_TYPE_IDS, WRONG_STRING_TYPE, WRONG_STRING_TYPE_IDS
 
 class TestAudioFeatures():
-
-    # SONG_NAME
-    @pytest.mark.parametrize('value', VALID_SONG_NAMES, ids=VALID_SONG_NAMES_IDS )
-    def test_valid_song_name(self, data, value):
-        test_data = data.copy()
-        test_data['song_name'] = value
-        validated_data = AudioFeatures(**test_data)
-        assert validated_data.song_name == 'test song'
-
-    @pytest.mark.parametrize('value', EMPTY_STRINGS, ids=EMPTY_STRINGS_IDS)
-    def test_invalid_song_name(self, data, value):
-        test_data = data.copy()
-        test_data['song_name'] = value
-        with pytest.raises(ValueError, match='song_name'):
-            AudioFeatures(**test_data)
-
-
-    @pytest.mark.parametrize('value', WRONG_STRING_TYPE, ids=WRONG_STRING_TYPE_IDS)
-    def test_invalid_types_song_name(self, data, value):
-        test_data = data.copy()
-        test_data['song_name'] = value
-        with pytest.raises(TypeError, match='song_name'):
-            AudioFeatures(**test_data)
-
-    # ARTIST_ID
-    @pytest.mark.parametrize('value',VALID_ID_VALUES, ids=VALID_ID_VALUES_IDS)
-    def test_valid_artist_id(self, data, value):
-        test_data = data.copy()
-        test_data['artist_id'] = value
-        validated_data = AudioFeatures(**test_data)
-        assert validated_data.artist_id == value
-
-    @pytest.mark.parametrize('value',INVALID_IDS, ids=INVALID_ID_IDS)
-    def test_invalid_artist_id(self, data, value):
-        test_data = data.copy()
-        test_data['artist_id'] = value
-        with pytest.raises(ValueError, match='artist_id'):
-            AudioFeatures(**test_data)
-           
-
-    @pytest.mark.parametrize('value', WRONG_STRING_TYPE, ids=WRONG_STRING_TYPE_IDS)
-    def test_invalid_types_artist_id(self, data, value):
-        test_data = data.copy()
-        test_data['artist_id'] = value
-        with pytest.raises(TypeError, match='artist_id'):
-            AudioFeatures(**test_data)
-
     # SONG_ID
     @pytest.mark.parametrize('value',VALID_ID_VALUES, ids=VALID_ID_VALUES_IDS)
     def test_valid_song_id(self, data, value):

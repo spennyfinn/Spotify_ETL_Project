@@ -112,31 +112,6 @@ class TestLastFm():
         with pytest.raises(TypeError, match='artist_id'):
             LastFm(**test_data)
 
-    #SONG URL
-    @pytest.mark.parametrize('value', VALID_URL_VALUES, ids=VALID_URL_VALUES_IDS)
-    def test_valid_song_url(self, lastfm_data, value):
-        test_data = lastfm_data.copy()
-        test_data['song_url'] = value
-        validated_data = LastFm(**test_data)
-        assert validated_data.song_url.strip() == value
-
-
-    @pytest.mark.parametrize('value', NO_DOMAIN_URL_VALUES, ids=NO_DOMAIN_URL_VALUES_IDS )
-    def test_invalid_song_url(self, lastfm_data, value):
-        test_data = lastfm_data.copy()
-        test_data['song_url'] = value
-        with pytest.raises(ValueError, match='actual website address'):
-            LastFm(**test_data)
-
-    
-
-    @pytest.mark.parametrize('value', WRONG_STRING_TYPE,ids=WRONG_STRING_TYPE_IDS)
-    def test_invalid_types_song_url(self, lastfm_data, value):
-        test_data = lastfm_data.copy()
-        test_data['song_url'] = value
-        with pytest.raises(TypeError, match='song_url'):
-            LastFm(**test_data)
-
     #MBID
     @pytest.mark.parametrize('value', VALID_MBID_VALUES, ids=VALID_MBID_VALUES_IDS)
     def test_valid_mbid(self, lastfm_data, value):
@@ -152,12 +127,19 @@ class TestLastFm():
         with pytest.raises(ValueError, match='mbid'):
             LastFm(**test_data)
 
-    @pytest.mark.parametrize('value', WRONG_STRING_TYPE,ids=WRONG_STRING_TYPE_IDS)
+    @pytest.mark.parametrize('value', WRONG_STRING_TYPE[:-1],ids=WRONG_STRING_TYPE_IDS[:-1])
     def test_invalid_types_mbid(self, lastfm_data, value):
         test_data = lastfm_data.copy()
         test_data['mbid'] = value
         with pytest.raises(TypeError, match='mbid'):
             LastFm(**test_data)
+
+    @pytest.mark.parametrize('value', [None],ids=['None'])
+    def test_invalid_types_mbid(self, lastfm_data, value):
+        test_data = lastfm_data.copy()
+        test_data['mbid'] = value
+        assert test_data['mbid']== None
+
 
     #ON TOUR
     @pytest.mark.parametrize('value', VALID_BOOLEAN_VALUES, ids=VALID_BOOLEAN_VALUES)

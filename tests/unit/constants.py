@@ -76,7 +76,7 @@ INVALID_MBID_VALUES_IDS = ['Empty String', 'Single Space', 'Too Short', 'Invalid
 # NUMERIC VALIDATION CONSTANTS 
 # #################################
 
-VALID_TRACK_NUMBER_VALUES = [1, 100, 50, 13, 75]
+VALID_TRACK_NUMBER_VALUES = [1, 100, 150, 199, 75]
 VALID_DURATION_VALUES = [(1, 1000, .02), (7200, 7200000, 120.0), (200, 200000, 3.33)]
 VALID_DURATION_VALUES_IDS = ['One Second', '2 Hours', '200 seconds']
 
@@ -134,7 +134,7 @@ VALID_AUDIO_FEATURE_FLOATS_IDS = ['BPM_50', 'BPM_100', 'BPM_150', 'BPM_200']
 # #################################
 
 AUDIO_FEATURES_REQUIRED_FIELDS = [
-    'song_name', 'artist_id', 'bpm', 'energy', 'spectral_centroid',
+    'song_id', 'bpm', 'energy', 'spectral_centroid',
     'zero_crossing_rate', 'danceability', 'preview_url',
     'harmonic_ratio', 'percussive_ratio'
 ]

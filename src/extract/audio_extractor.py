@@ -1,7 +1,6 @@
 import os
 from typing import Dict
 from dotenv import load_dotenv
-import psycopg2
 from spotify_preview_finder import finder
 import librosa
 import requests
@@ -10,36 +9,44 @@ from io import BytesIO
 from src.extract.lastfm_extractor import send_through_kafka
 from src.utils.database import get_db
 from src.utils.kafka_utils import create_producer
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+import multiprocessing
 
 
 load_dotenv()
 
 def get_songs_and_artists(cur)-> list:
     '''
-    Retrieves song name, artist name, artist_id, and song_id from the database
+    Retrieves song name, artist name and song_id from the database
 
     Args:
         cur (psycopg2.cursor): cursor object 
     Returns
         list: a list of tuples (song_name, artist_name, artist_id, song_id ) or None if the database is empty
     '''
-    cur.execute('SELECT song_name, artist_name, s.artist_id, s.song_id '  
-                'FROM songs AS s JOIN artists AS a ' 
-                'ON a.artist_id = s.artist_id '
+    cur.execute('SELECT s.song_id, a.artist_name, s.song_id '
+                'FROM songs s '
+                'JOIN artists a ON a.artist_id = s.artist_id '
+                'LEFT JOIN song_audio_features af ON af.song_id = s.song_id '
+                'WHERE af.song_id IS NULL;'
                 )
     result = cur.fetchall()
     return result
 
 
 
-def get_audio_features(song_name, artist_name, artist_id, song_id)-> Dict:
+def get_audio_features(song_name, artist_name, song_id)-> Dict:
     
     my_finder = finder
     search_query = f"{song_name} {artist_name}"
     print(f'Song ID:{song_id}')
     # Check what methods are available
     result = my_finder.search_and_get_links(song_name=search_query, client_id=os.getenv('SPOTIFY_CLIENT_ID'), client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"), limit=1)
-    print(result)
+    #print(result)
+
+    if not result['results']:
+        print(f"There was no preview url for {song_name} by {artist_name}")
+        return None
     preview_url = result['results'][0]['previewUrl']
     if result['success']!= True:
         print(f"There is not a preview url available for {song_name} by {artist_name}")
@@ -75,17 +82,19 @@ def get_audio_features(song_name, artist_name, artist_id, song_id)-> Dict:
     print(f"Percussiveness: {zcr_mean}")
 
     y_harmonic, y_percussive = librosa.effects.hpss(y)
-    harmonic_ratio = (sum(abs(y_harmonic))/ np.sum(np.abs(y)))
-    percussive_ratio = (sum(abs(y_percussive))/np.sum(np.abs(y)))
+    harmonic_raw = (sum(abs(y_harmonic)))
+    percussive_raw = (sum(abs(y_percussive)))
+    total= harmonic_raw + percussive_raw
+    harmonic_ratio = (sum(abs(y_harmonic))/total)
+    percussive_ratio = (sum(abs(y_percussive))/total)
+
     print(f"Harmonic Ratio: {harmonic_ratio}")
     print(f"Percussive Ratio: {percussive_ratio}")
 
     
     
     data={
-            'name': song_name,
             'song_id': song_id,
-            'artist_id' : artist_id,
             'bpm' : float(bpm[0]),
             'energy' : float(energy),
             'spectral_centroid' : float(centroid_mean),
@@ -106,11 +115,27 @@ if __name__ == "__main__":
     producer = create_producer('music-streaming-producer')
     song_artists=get_songs_and_artists(cur)
 
-    for song, artist, artist_id, song_id in song_artists:
-        data=get_audio_features(song, artist, artist_id, song_id)
-      
-        if data:
-            send_through_kafka(data, 'music_audio_features', producer)
-        continue
-        
+    cpu_count = multiprocessing.cpu_count()
+    max_workers = min(2, cpu_count)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as w:
+        futures= { w.submit(get_audio_features, song, artist, song_id): (song, artist, song_id) for song, artist, song_id in song_artists}
+
+        for future in as_completed(futures):
+            try:
+                song, artist, song_id = futures[future]
+                data= future.result(timeout=120)
+                if data:
+                    send_through_kafka(data, 'music_audio_features', producer)
+                    print(f'{song} by {artist} was processed')
+                else:
+                    print(f'There was an error processing {song} by {artist}')
+            except TimeoutError:
+                song, artist, song_id = futures[future]
+                print(f"There was a timeout error while processing {song} by {artist}")
+            
+            except Exception as e:
+                song, artist, song_id = futures[future]
+                print(f"There was an error while processing {song} by {artist}: {e}")
     
+    print(f'All {len(song_artists)} songs were processed')
