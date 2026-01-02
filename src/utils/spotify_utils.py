@@ -6,6 +6,76 @@ import time
 from dotenv import load_dotenv
 
 
+
+
+
+
+
+
+lastfm_song_query = ("INSERT INTO songs(song_name,song_id, song_listeners, artist_id,mbid,engagement_ratio) "
+                 "VALUES (%s, %s, %s, %s, %s, %s) "
+                 "ON CONFLICT (song_id) DO UPDATE SET "
+                 "song_listeners = EXCLUDED.song_listeners, "
+                 "engagement_ratio = EXCLUDED.engagement_ratio, "
+                 "mbid = EXCLUDED.mbid, "
+                 "updated_at = CURRENT_TIMESTAMP; ")
+                 
+lastfm_artist_query = ("INSERT INTO artists(artist_name,artist_id, on_tour, total_listeners, total_playcount, plays_per_listener) "
+            "VALUES (%s,%s, %s, %s, %s, %s) "
+            "ON CONFLICT (artist_id) DO UPDATE "
+            "SET on_tour = EXCLUDED.on_tour, "
+            "total_listeners = EXCLUDED.total_listeners,"
+            "total_playcount = EXCLUDED.total_playcount,"
+            "plays_per_listener=EXCLUDED.plays_per_listener, "
+            "updated_at = CURRENT_TIMESTAMP; ")
+
+
+spotify_song_query=('INSERT INTO songs(song_name, artist_id, duration_ms, duration_seconds, duration_minutes, release_date, release_date_precision, is_explicit, popularity, track_number, song_id, album_id, is_playable) '
+                   'VALUES(%s,%s,%s ,%s,%s,%s,%s,%s,%s,%s, %s, %s, %s) ' \
+                   'ON CONFLICT (song_id) '
+                   'DO UPDATE ' \
+                    'SET duration_seconds = EXCLUDED.duration_seconds,' \
+                    'duration_minutes = EXCLUDED.duration_minutes,' \
+                    'duration_ms= EXCLUDED.duration_ms,' \
+                    'release_date = EXCLUDED.release_date,' \
+                    'release_date_precision=EXCLUDED.release_date_precision,' \
+                    'is_explicit=EXCLUDED.is_explicit,' \
+                    'popularity= EXCLUDED.popularity,' \
+                    'track_number= EXCLUDED.track_number,' \
+                    'is_playable = EXCLUDED.is_playable, '
+                    'album_id = EXCLUDED.album_id, '
+                    'updated_at = CURRENT_TIMESTAMP; '
+                   )
+spotify_album_query=('INSERT INTO albums(album_title, artist_id,album_type, album_total_tracks, album_id) '
+                    'VALUES(%s,%s,%s,%s, %s) '
+                    'ON CONFLICT (album_id) DO UPDATE '
+                    'SET album_type = EXCLUDED.album_type,'
+                    'album_total_tracks = EXCLUDED.album_total_tracks, '
+                    'updated_at = CURRENT_TIMESTAMP;')
+
+spotify_artist_query= ('INSERT INTO artists (artist_id, artist_name) '
+                        'VALUES(%s,%s) '
+                        'ON CONFLICT (artist_id) DO UPDATE SET '
+                        'artist_name = EXCLUDED.artist_name, '
+                        'updated_at = CURRENT_TIMESTAMP; '
+                        )
+
+
+
+insert_audio_features_query= ('INSERT INTO song_audio_features(song_id, bpm, energy, spectral_centroid, zero_crossing_rate, danceability, preview_url, harmonic_ratio, percussive_ratio) '
+                              'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) '
+                              'ON CONFLICT (song_id) DO UPDATE SET '
+                              'bpm = EXCLUDED.bpm, '
+                              'energy = EXCLUDED.energy, '
+                              'spectral_centroid = EXCLUDED.spectral_centroid, '
+                              'zero_crossing_rate = EXCLUDED.zero_crossing_rate, '
+                              'danceability = EXCLUDED.danceability, '
+                              'preview_url = EXCLUDED.preview_url, '
+                              'harmonic_ratio = EXCLUDED.harmonic_ratio, '
+                              'percussive_ratio = EXCLUDED.percussive_ratio;'
+)
+
+
 # -------------------------------
 # TOKEN FUNCTIONS
 # -------------------------------
@@ -87,6 +157,7 @@ def load_token():
 
 def extract_spotify_data(data):
         data_list=[]
+
         tracks = data.get('tracks', {})
         items= tracks.get('items', [])
         for item in items:
@@ -149,3 +220,36 @@ def get_song_and_artist_name(data):
             continue
         song_artist_list.append((song_name, artist_name))
     return song_artist_list
+
+
+def insert_spotify_artists(artist_data,cur):
+    artist_name = artist_data[1].lower().strip()
+    artist_id = artist_data[0].strip()
+    print(artist_name, artist_id)
+
+    cur.execute(f"SELECT artist_name, artist_id FROM artists WHERE artist_name = '{artist_name}' AND artist_id = '{artist_id}';")
+    res=cur.fetchone()
+    
+    if res:
+        db_artist_name, db_artist_id = res
+        if db_artist_id==artist_id and db_artist_name==artist_name:
+            print('Passing')
+            return
+        elif db_artist_name != artist_name:
+            print('updating name')
+            cur.execute('UPDATE artists SET artist_name = %s WHERE artist_id = %s', (artist_name, db_artist_id))
+        elif db_artist_id!=artist_id:
+            print('updating id')
+            cur.execute("UPDATE artists SET artist_id = %s WHERE artist_name = %s", (artist_id, db_artist_name))
+        else:
+            print('inserting')
+            cur.execute(spotify_artist_query, artist_data)
+    else:
+        print('inserting')
+        cur.execute(spotify_artist_query, artist_data)
+
+
+    
+    
+    
+

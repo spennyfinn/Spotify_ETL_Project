@@ -149,16 +149,15 @@ class TestParsers:
     def test_valid_audio_features(self,valid_audio_features):
         '''Tests valid audio features data against the parse_audio_features_data() function'''
         output= parse_audio_features_data(valid_audio_features)
-        assert output[0]=='test_song'
-        assert output[1]== '1234567890123456789012'
-        assert output[2]== 100.0
-        assert output[3]== .5
-        assert output[4]== 1000.0
-        assert output[5]== .17
-        assert output[6]== .7
-        assert output[7]== 'https://test.com'
-        assert output[8]== .51
-        assert output[9]== .49
+        assert output[0]=='1gj856fdB53pL96DStrn08'  # song_id
+        assert output[1]== 60.2  # bpm
+        assert output[2]== .93  # energy
+        assert output[3]== 500.2  # spectral_centroid
+        assert output[4]== 0.5  # zero_crossing_rate
+        assert output[5]== .6553  # danceability
+        assert output[6]== 'https://audio_features.com'  # preview_url
+        assert output[7]== .5  # harmonic_ratio
+        assert output[8]== .5  # percussive_ratio
 
     @pytest.mark.parametrize('field', AUDIO_FEATURES_REQUIRED_FIELDS)
     def test_missing_req_fields_audio_features(self, valid_audio_features, field):

@@ -3,12 +3,14 @@
 remove tables tags and artists alike
 
 
+get random word gen
+merge confests
 
 
 
 
 current:
-loading lastfm data
+log errors in load stage
   
     
 
@@ -22,3 +24,5 @@ rework validation for lastfm
 error hanfling for spotify transfrom
 reworking transform function into modular functions
 fix the dictionary indexing and replace with get in lastfm extraction
+fix mbid None value --> vali --> tests
+engagement ratiop doesnt have to be 0-1

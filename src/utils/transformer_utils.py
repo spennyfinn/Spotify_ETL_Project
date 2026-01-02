@@ -9,7 +9,7 @@ def safe_int(value, default=None):
     except(ValueError, TypeError):
         return default
 
-def safe_float(value, default=None):
+def safe_float(value, default=0.0):
     '''Safely convert to float'''
     if not value or value =='':
         return default

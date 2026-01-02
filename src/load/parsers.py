@@ -1,9 +1,10 @@
-import uuid
+
 
 
 
 
 def parse_lastfm_message(data):
+    print(f'PARSER: {data}')
     if type(data) is not dict:
         raise TypeError(f'The input data should be a dictionary but it was {type(data)}')
 
@@ -11,14 +12,12 @@ def parse_lastfm_message(data):
     missing = [field for field in required_fields if field not in data or data[field] is None]
     if missing:
         raise ValueError(f'These required fields are missing from the data {', '.join(missing)}')
-
     try: 
         song=[
             data['song_name'],
             data['song_id'],
             data['num_song_listeners'],
             data['artist_id'],
-            data['song_url'], 
             data['mbid'],
             data['engagement_ratio'],
             ]
@@ -68,15 +67,18 @@ def parse_spotify_message(data):
         ]
         album=[
             data['album_title'],
-            data['artist_name'],
+            data['artist_id'],
             data['album_type'],
             data['album_total_tracks'],
-            data['album_id']]
-        
+            data['album_id']
+            ]
+
         artist = [
             data['artist_id'],
             data['artist_name']
+
         ]
+        print(artist)
         return song, album, artist
 
     except (KeyError, TypeError, ValueError) as e:
@@ -87,15 +89,14 @@ def parse_audio_features_data(data):
     if type(data) is not dict:
         raise TypeError(f"Input data should be a dict but it was: {type(data)}")
 
-    required_fields =  ['song_name', 'artist_id', 'bpm', 'energy', 'spectral_centroid', 'zero_crossing_rate', 'danceability', 'preview_url', 'harmonic_ratio', 'percussive_ratio']
+    required_fields =  ['song_id', 'bpm', 'energy', 'spectral_centroid', 'zero_crossing_rate', 'danceability', 'preview_url', 'harmonic_ratio', 'percussive_ratio']
     missing = [field for field in required_fields if field not in data or data[field] is None]
     if missing:
         raise ValueError(f"There is at least one missing required field: {', '.join(missing)}")
-    
+
     try:
         audio_features=[
-            data['song_name'],
-            data['artist_id'],
+            data['song_id'],
             data['bpm'],
             data['energy'],
             data['spectral_centroid'],

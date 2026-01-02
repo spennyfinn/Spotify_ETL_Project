@@ -1,6 +1,8 @@
 import re
 from difflib import SequenceMatcher
-
+from bs4 import BeautifulSoup
+import time
+import requests
 
 def normalize_song_name(name):
     """
@@ -88,5 +90,26 @@ def similarity_score(str1, str2):
     if type(str2) is not str:
         raise TypeError(f'{str2} is not a string, rather it is a(n) {type(str2)} ')
     return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
+
+
+def get_words_list():
+    try:
+        words_list=[]
+        resp= requests.get('https://www.ef.edu/english-resources/english-vocabulary/top-3000-words/')
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, 'html.parser')
+        divs = soup.find('div', class_= 'field-item even')
+        words= divs.find('p')
+        for word in words:
+            if word.text.lower().strip() not in words_list and word.text.lower().strip() != '':
+                words_list.append(word.text.lower().strip())
+        return words_list
+    except requests.RequestException as e:
+        print(f'There was an error fetching the words list: {e}')
+        return None
+
+
+
+
 
 

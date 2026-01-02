@@ -1,4 +1,4 @@
-from librosa import ex
+
 import requests
 import os
 import json
@@ -6,15 +6,16 @@ from src.utils.kafka_utils import create_producer, flush_kafka_producer, send_th
 from src.utils.text_utils import normalize_song_name, similarity_score
 from src.utils.database import get_db
 from dotenv import load_dotenv
-import re
-
+import random
+import time
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
 
 def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
-    #normalize song and artist names
-    #print(f"SONG:{song_name} ARTIST:{artist_name}")
+
     song_name_normalized= normalize_song_name(song_name)
     artist_name_normalized=normalize_song_name(artist_name)
-    #print(f"SONG Norm:{song_name_normalized} ARTIST Norm:{artist_name_normalized}")
+   
 
     #define url parameters
     query = f"{song_name_normalized} {artist_name_normalized}"
@@ -23,7 +24,7 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
     #call API with exception handling
     try:
         resp=requests.get(url=f'http://ws.audioscrobbler.com/2.0/?method=track.search&track={query}&api_key={key}&format=json&limit=5')
-        resp.raise_for_status()
+        print(resp.url)
         data=resp.json()
     except json.JSONDecodeError as e:
         print(f"There was an error when decoding th JSON for {song_name} by {artist_name}: {e}")
@@ -38,7 +39,6 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
         print(f"Connection error for {song_name} by {artist_name}: {e}")
         return None
     
-    #parse results
     results = data.get('results', {})
     trackmatches= results.get('trackmatches', {})
     tracks= trackmatches.get('track', [])
@@ -74,7 +74,7 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
             print(f"Artist score was too low to continue: {song_title} by {artist_title} with a score of {artist_score:.2f}")
             continue
         
-        #get the original artist from the db
+       
         original_artist = artist_name.lower().strip()
 
         #rerun similarity test on artist to perform error handing again
@@ -116,6 +116,7 @@ def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
                 'artist_id': artist_id,
                 'song_id':song_id
             }
+        time.sleep(random.uniform(.5, 1))
             
     # ensure the match is relatively similar
     if best_match and best_score > .8:
@@ -164,14 +165,12 @@ def match_artists_from_lastfm(track_data, key):
     original_artist_name=original_artist_name.lower().strip()
     
     artist_score=similarity_score(artist_name, original_artist_name)
-    #if it is not an exact match return
-    if artist_score!=1.0:
+
+    if artist_score<.9:
         return None
     
     #get other useful data and add to track_data
-    track_data['artist_id']=artist_id
     track_data['mbid']= artist.get('mbid', None)
-    track_data['url'] = artist.get('url', None)
     track_data['on_tour'] = artist.get('on_tour', 0)
     track_data['artist_listeners']=int(stats.get('listeners', 0))
     track_data['artist_playcount'] = int(stats.get('playcount',0))
@@ -181,38 +180,67 @@ def match_artists_from_lastfm(track_data, key):
     print()
     return track_data
 
+def process_last_fm_data(song_name, artist_name, song_id, artist_id, key):
+    try:
 
+        match_data = get_track_from_lastfm(song_name, artist_name, song_id, artist_id, key)
+        if not match_data:
+            print(f"No track data found for: {song_name} by {artist_name}")
+            return None
+            
+
+        complete_data = match_artists_from_lastfm(match_data, key)
+        if not complete_data:
+            print(f"Artist matching failed for: {song_name} by {artist_name}")
+            return None
+        return complete_data
+        
+    except Exception as e:
+        print(f"Error processing {song_name} by {artist_name}: {e}")
+        return None
 
 if __name__ == '__main__':
     
     #SETUP
-    load_dotenv()
-    key = os.getenv("LAST_FM_KEY")
-    conn, cur=get_db()
-    producer = create_producer('music-streaming-producer')
+    try:
+        load_dotenv()
+        key = os.getenv("LAST_FM_KEY")
+        conn, cur=get_db()
+        producer = create_producer('music-streaming-producer')
+        track_error_count =0
+        track_success_count=0
+        #query database for song and artist names where there is missing lastfm data
+        cur.execute('SELECT s.song_name, a.artist_name,s.song_id, s.artist_id FROM songs AS s JOIN artists AS a ON s.artist_id=a.artist_id WHERE s.engagement_ratio IS NULL order by popularity desc')
+        res=cur.fetchall()
+        cpu_count= multiprocessing.cpu_count()
+        max_workers = max(4, cpu_count)
 
-    #query database for song and artist names where there is missing lastfm data
-    cur.execute('SELECT s.song_name, a.artist_name,s.song_id, s.artist_id FROM songs AS s JOIN artists AS a ON s.artist_id=a.artist_id WHERE s.engagement_ratio IS NULL')
-    res=cur.fetchall()
-    
-    #success/error counters
-    track_error_count =0
-    track_success_count=0
-    for song_name, artist_name,song_id, artist_id in res:
-        #get the track data from last fm
-        match_data =get_track_from_lastfm(song_name, artist_name,song_id,artist_id, key)
-        if not match_data:
-            track_error_count+=1
-            continue
-        #if successful get the artist data and send through kafka
-        track_success_count+=1
-        complete_data=match_artists_from_lastfm(match_data, key)
-        if complete_data:
-            send_through_kafka(complete_data, 'lastfm_artist', producer)
+        with ProcessPoolExecutor(max_workers=max_workers) as w:
+            futures = {w.submit(process_last_fm_data, song_name, artist_name, song_id, artist_id, key):(song_name, artist_name, song_id,artist_id) for song_name, artist_name, song_id, artist_id in res}
+        
+            for future in as_completed(futures):
+                
+                song_name, artist_name, song_id, artist_id=futures[future]
+                try:
+                    data= future.result(timeout=60)
+                    print(f"DTAA: {data}")
+                    if data:
+                        send_through_kafka(data, 'lastfm_artist', producer)
+                        track_success_count+=1
+                        print(f'Sent {song_name} through kafka')
+                    else:
+                        track_error_count+=1
+                        continue
+                except Exception as e:
+                    print(f"There was an error gettting the data from lastfm: {e}")
+            
+                
 
-    print(f"Track Success count: {track_success_count}")
-    print(f"Track Error count: {track_error_count}")
-    flush_kafka_producer(producer)
+        print(f"Track Success count: {track_success_count}")
+        print(f"Track Error count: {track_error_count}")
+        flush_kafka_producer(producer)
+    except Exception as e:
+        print(f"There was an error while extracting the lastfm data: {e}")
 
     
 

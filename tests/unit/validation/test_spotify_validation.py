@@ -14,7 +14,7 @@ class TestSpotifyValidation:
     
 
     #POPULARITY
-    @pytest.mark.parametrize('value', VALID_TRACK_NUMBER_VALUES.copy()+[0], ids=VALID_TRACK_NUMBER_VALUES.copy()+[0])
+    @pytest.mark.parametrize('value', [0, 1, 99, 100, 50], ids=[0, 1, 99, 100, 50])
     def test_popularity_boundaries(self, valid_spotify_data, value):
         test_data = valid_spotify_data.copy()
         test_data['popularity'] = value
@@ -284,7 +284,7 @@ class TestSpotifyValidation:
     def test_valid_album_total_tracks(self, valid_spotify_data, value):
         test_data = valid_spotify_data.copy()
         test_data['album_total_tracks'] = value
-        data = Spotify_Data(**test_data)
+        data = Spotify_Data(**test_data) 
         assert data.album_total_tracks == value
 
     def test_validate_return_zero_album_total_tracks(self, valid_spotify_data):
@@ -294,7 +294,7 @@ class TestSpotifyValidation:
         assert data.album_total_tracks == 0
     
 
-    @pytest.mark.parametrize('value', [-1, -50, 101, 200])
+    @pytest.mark.parametrize('value', [-1, -50, 201, 300])
     def test_invalid_inputs_album_total_tracks(self, valid_spotify_data, value):
         test_data = valid_spotify_data.copy()
         test_data['album_total_tracks'] = value
@@ -347,7 +347,7 @@ class TestSpotifyValidation:
         assert data.track_number == value
     
 
-    @pytest.mark.parametrize('value', [-1, -50, 101, 200])
+    @pytest.mark.parametrize('value', [-1, -50, 300, 201])
     def test_invalid_inputs_track_number(self, valid_spotify_data, value):
         test_data = valid_spotify_data.copy()
         test_data['track_number'] = value

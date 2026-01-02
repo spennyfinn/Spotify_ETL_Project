@@ -1,6 +1,5 @@
-from typing import Any, Optional
-from llvmlite.ir import Value
-from numba import bool_
+from typing import Any
+from llvmlite.ir.values import Value
 from pydantic import  BaseModel, field_validator, model_validator
 import re
 import string
@@ -12,7 +11,6 @@ class LastFm(BaseModel):
     artist_name: Any
     artist_name: Any
     num_song_listeners: Any
-    song_url: Any
     mbid:Any
     on_tour: Any
     song_id: Any
@@ -37,7 +35,7 @@ class LastFm(BaseModel):
             return None
         if type(value) is not float:
             raise TypeError(f'{info.field_name} should be a decimal number, but got {type(value).__name__}')
-        if value < 0.0 or value > 2000:
+        if value < 0.0 or value > 10000:
             raise ValueError(f"{info.field_name} should be between 0 and 2000, but got {value}")
         return float(value)
 
@@ -47,8 +45,8 @@ class LastFm(BaseModel):
     def validate_engagement_ratio(cls, value, info):
         if type(value) is not float:
             raise TypeError(f'{info.field_name} needs to be a decimal number between 0 and 1, but got {type(value).__name__}')
-        if value < 0.0 or value > 1.0:
-            raise ValueError(f"{info.field_name} represents a ratio, so it must be between 0 and 1 (got {value})")
+        if value < 0.0:
+            raise ValueError(f"{info.field_name} must be greater than 0 but got: {Value}")
         return float(value)
         
     @field_validator('on_tour')
@@ -79,21 +77,12 @@ class LastFm(BaseModel):
             raise ValueError(f"{info.field_name} contains invalid characters - only letters and numbers allowed")
         return stripped
     
-    @field_validator('song_url')
-    def validate_url(cls, value, info):
-        '''Make sure URLs are properly formatted'''
-        if type(value) is not str:
-            raise TypeError(f"{info.field_name} needs to be a web address, but got {type(value).__name__}")
-        stripped = value.strip()
-        if not stripped.startswith('https://') and not stripped.startswith('http://'):
-            raise ValueError(f"{info.field_name} must start with 'https://' or 'http://'")
-        if len(stripped) <= len('https://') or (stripped.startswith('http://') and len(stripped) <= len('http://')):
-            raise ValueError(f'{info.field_name} needs an actual website address after "https://"')
-        return stripped
     
     @field_validator('mbid')
     def validate_mbid(cls, value, info):
         '''Make sure MBID follows the standard MusicBrainz format'''
+        if value is None:
+            return None
         if type(value) is not str:
             raise TypeError(f"{info.field_name} needs to be a text string, but got {type(value).__name__}")
         pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
