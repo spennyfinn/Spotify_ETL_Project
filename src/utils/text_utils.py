@@ -101,7 +101,6 @@ def get_words_list():
         divs = soup.find('div', class_= 'field-item even')
         words= divs.find('p')
         for word in words:
-            print(word.text.lower().strip())
             if word.text.lower().strip() not in words_list and word.text.lower().strip() != '':
                 words_list.append(word.text.lower().strip())
         return words_list

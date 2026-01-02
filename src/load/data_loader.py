@@ -1,13 +1,14 @@
 
+
 from src.logging_config import error_logger
 import psycopg2
 from dotenv import load_dotenv
 import logging
-from datetime import datetime
+
 from src.utils.database import get_db
 from src.utils.kafka_utils import consume_message, create_consumer
 from src.load.parsers import parse_audio_features_data, parse_lastfm_message, parse_spotify_message
-from src.utils.spotify_utils import insert_spotify_artists, spotify_album_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
+from src.utils.spotify_utils import  spotify_album_query, spotify_artist_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
 
 
 load_dotenv()
@@ -21,94 +22,160 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-
-def load_last_fm(message, cur):
-    
-    song, artist  = parse_lastfm_message(message)
-    song_name = song[0]
-    artist_name = artist[0]
-    print(f'{song_name}, {artist_name}')
-    
-    try:
-        # Insert artist and album first
-        cur.execute(lastfm_artist_query, artist)
-        logging.info(f"Artist loaded/updated: {artist_name}")
-    except psycopg2.IntegrityError as e:
-        error_logger.error(f"Failed to load {artist_name}: {e}",
-            extra={'operation': 'lastfm_artist_insert', 'artist_name': artist_name, 'error_type': type(e).__name__})
-        return False
-
-    # Insert the song 
-    try:
-        cur.execute(lastfm_song_query, song)
-        logging.info(f"Song loaded/updated: {song_name} by {artist_name}")
-    except psycopg2.IntegrityError as e:
-            error_logger.error(f"Failed to load song {song_name} by {artist_name}: {e}",
-                extra={'operation': 'lastfm_song_insert', 'song_name': song_name, 'artist_name': artist_name, 'error_type': type(e).__name__})
-            return False
-    
-    return True
-
-def load_spotify_data(message,cur):
-    song, album, artist= parse_spotify_message(message)
-    print(f'SOng:{song}')
-    print(album)
-    print(artist)
-    song_name = song[0]
-    print(song_name)
-    artist_name=artist[1]
-    print(artist_name)
+ 
+def load_lastfm_data_batch(lastfm_batch, cur):
+    success_count=0
+    error_count=0
+    artist_batch = []
+    song_batch=[]
+    for message in lastfm_batch:
+        try:
+            song, artist  = parse_lastfm_message(message)
+            artist_name = artist[0]
+            artist_batch.append(artist)
+            song_batch.append(song)
+        except Exception as e:
+            error_logger.error(f"Failed to parse Last.fm message: {e}", extra={'operation': 'lastfm_parse', 'message': str(message)[:200]})
+            error_count+=1
+            continue
+    if artist_batch:
+        try:
+            # Insert artist and album first
+            cur.executemany(lastfm_artist_query, artist_batch)
+            logging.info(f"Artist batch loaded/updated: {len(artist_name)}")
+            success_count+=len(artist_batch)
+        except psycopg2.IntegrityError as e:
+            error_logger.error(f"Failed to load batch from lastfm: {e}")
             
-    if not song[0] or not song[1]:
-        error_logger.error(f"NULL values detected: song_name={song[0]}, artist_id={song[1]}",
-            extra={'operation': 'spotify_null_check', 'song_name': song[0], 'artist_id': song[1]})
-        return False
+            for artist in artist_batch:
+                try: 
+                    cur.execute(lastfm_artist_query, artist)
+                    success_count+=1
+                except Exception as e:
+                    error_logger.error(f"Failed to load artist: {e}")
+                    error_count+=1
 
-    try:
-        insert_spotify_artists(artist,cur)
-        logging.info(f'Spotify artist data inserted: {song_name} by {artist_name}')
-    except Exception as e:
-        error_logger.error(f"Failed to insert Spotify artist data for {song_name} by {artist_name}: {e}",
-            extra={'operation': 'spotify_artist_insert', 'song_name': song_name, 'artist_name': artist_name, 'error_type': type(e).__name__})
-        return False
-    try:
-        cur.execute(spotify_album_query, album)
-        logging.info(f'Spotify artist data inserted: {album[0]} by {artist_name} for {song_name}')
-    except Exception as e:
-        error_logger.error(f"Failed to insert Spotify album data for {song_name} by {artist_name}: {e}",
-            extra={'operation': 'spotify_album_insert', 'song_name': song_name, 'artist_name': artist_name, 'error_type': type(e).__name__})
-        return False
-    try:
-        cur.execute(spotify_song_query, song)
-        logging.info(f"Spotify song data inserted: {song_name} by {artist_name}")
-    except Exception as e:
-        error_logger.error(f"Failed to insert Spotify song data for {song_name} by {artist_name}: {e}",
-            extra={'operation': 'spotify_song_insert', 'song_name': song_name, 'artist_name': artist_name, 'error_type': type(e).__name__})
-        return False
-    
-            
-    # Try to insert/update album, handling potential album_id conflicts
-    try:
+    # Insert the song '
+    if song_batch:
+        try:
+            cur.executemany(lastfm_song_query, song_batch)
+            logging.info(f"Song batch loaded/updated: {len(song_batch)}")
+            success_count+=len(song_batch)
+        except psycopg2.IntegrityError as e:
+                error_logger.error(f"Failed to load song batch: {e}")
+
+                for song in song_batch:
+                    try:
+                        cur.execute(lastfm_song_query, song)
+                        success_count+=1
+                    except Exception as e:
+                        error_logger.error(f"Failed individual song insert: {e}")
+                        error_count+=1
+               
+    return success_count, error_count
+
+
+def load_spotify_data_batch(songs,cur):
+    success_count=0
+    error_count=0
+    song_batch=[]
+    artist_batch=[]
+    album_batch=[]
+    for message in songs:
+        song, album, artist= parse_spotify_message(message)
+        if not song[0] or not song[1]:
+            error_logger.error(f"NULL values detected: song_name={song[0]}, artist_id={song[1]}",
+                extra={'operation': 'spotify_null_check', 'song_name': song[0], 'artist_id': song[1]})
+            error_count+=1
+            continue
+        song_batch.append(song)
+        album_batch.append(album)
+        artist_batch.append(artist)
         
-        logging.info(f"✓ Spotify album data inserted: {album[0]} by {artist_name}")
-    except psycopg2.IntegrityError as e:
-        error_logger.error(f"Failed to insert Spotify album data for {album[0]} by {artist_name}: {e}",
-            extra={'operation': 'spotify_album_insert', 'album_title': album[0], 'artist_name': artist_name, 'error_type': type(e).__name__})
 
-        return False
+    if artist_batch:
+        try:
+            cur.executemany(spotify_artist_query, artist_batch)
+            logging.info(f'Spotify artist data batch inserted')
+            success_count+=len(artist_batch)
+        except Exception as e:
+            error_logger.error(f"Failed to insert Spotify artist data batch {e}")
+            for artist in artist_batch:
+                try:
+                    cur.execute(spotify_artist_query, artist)
+                    success_count+=1
+                except Exception as e:
+                    error_logger.error(f"Failed to insert Spotify artist: {e}")
+                    error_count+=1
+    if album_batch:
+        try:
+            cur.executemany(spotify_album_query, album_batch)
+            logging.info(f'Spotify artist data inserted: {album[0]}')
+            success_count+=len(album_batch)
+        except Exception as e:
+            error_logger.error(f"Failed to insert Spotify album batch: {e}")
+            error_count+=1
+
+            for album in album_batch:
+                try:
+                    cur.execute(spotify_album_query, album)
+                    success_count+=1
+                except Exception as e:
+                    error_logger.error(f"Failed to insert Spotify album: {e}")
+                    error_count+=1
+    if song_batch: 
+        print(f'song_batch, {song_batch}')
+        try:
+            cur.executemany(spotify_song_query, song_batch)
+            logging.info(f'Spotify song batch inserted')
+            success_count+=len(song_batch)
+        except Exception as e:
+            error_logger.error(f"Failed to insert Spotify song batch: {e}")
+
+            for song in song_batch:
+                try:
+                    cur.execute(spotify_song_query, song)
+                    success_count+=1
+                except Exception as e:
+                    error_logger.error(f"Failed to insert Spotify song: {e}")
+                    error_count+=1
+
     
-    return True
+    return success_count, error_count
 
-def load_audio_features(message, cur):
-    try:
-        audio_features = parse_audio_features_data(message)
-        cur.execute(insert_audio_features_query, audio_features)
-        logging.info(f"Audio features loaded for song_id: {message.get('song_id', 'Unknown')}")
-        return True
-    except Exception as e:
-        error_logger.error(f"Failed to load audio features: {e}",
-            extra={'operation': 'audio_features_insert', 'song_id': message.get('song_id', 'unknown'), 'error_type': type(e).__name__})
-        return False
+def load_audio_features_batch(batch, cur):
+    success_count =0
+    error_count=0
+    audio_batch=[]
+
+    for message in batch:
+        try:
+            audio_features = parse_audio_features_data(message)
+            audio_batch.append(audio_features)
+        except Exception as e:
+            error_logger.error('Failed to parse audio feature data: {e}')
+            error_count+=1
+        continue
+    if audio_batch:
+        try:
+            cur.executemany(insert_audio_features_query, audio_batch)
+            logging.info(f"Audio features loaded")
+            success_count+=len(audio_features)
+        except Exception as e:
+            error_logger.error(f"Failed to load audio features: {e}")
+            for feature in audio_batch:
+                try:
+                    cur.execute(insert_audio_features_query, feature)
+                    success_count+=1
+                except Exception as e:
+                    error_logger.error(f'Failed to load individual song: {e}')
+                    error_count+=1
+
+    return success_count, error_count
+                
+
+            
+        
 
 
 
@@ -128,68 +195,96 @@ if __name__=='__main__':
         success_count=0
         errors_count = 0
 
-        for message in consume_message(consumer, ['music_transformed']):
-           
-            message= message[1]
-            print(message)
+        lastfm_batch=[]
+        spotify_batch=[]
+        audio_batch=[]
+        batch_size=10
 
-            try:
+        try:
+            for message in consume_message(consumer, ['music_transformed']):
+            
+                message= message[1]
+                print(message)
                 if message['source']== 'Lastfm':
-                    res=load_last_fm(message,cur)
-                    if not res:
-                        errors_count+=1
-                    else:
-                        lastfm_count+=1
-
-                    
-
-
+                    lastfm_batch.append(message)
+                    if len(lastfm_batch)>= batch_size:
+                        success, errors= load_lastfm_data_batch(lastfm_batch, cur)
+                        success_count+=success
+                        lastfm_count+=success
+                        errors_count+=errors
+                        lastfm_batch=[]
+                        logging.info(f"Processed Lastfm batch: {success} success, {errors} errors")
                 elif message['source']=='Spotify':
-                    res=load_spotify_data(message,cur)
-                    if not res:
-                        errors_count+=1
-                    else:
-                        spotify_count+=1
-                    
+                    spotify_batch.append(message)
+                    if len(spotify_batch)>= batch_size:
+                        success, errors= load_spotify_data_batch(spotify_batch, cur)
+                        success_count+=success
+                        spotify_count+=success
+                        errors_count+=errors
+                        spotify_batch=[]
+                        logging.info(f"Processed Spotify batch: {success} success, {errors} errors")
                 elif message['source']=='preview_url':
-                    res=load_audio_features(message,cur)
-                    if not res:
-                        errors_count+=1
-                    else:
-                        audio_features_count+=1
+                    audio_batch.append(message)
+                    if len(audio_batch)>= batch_size:
+                        success, errors=  load_audio_features_batch(audio_batch, cur)
+                        success_count+=success
+                        audio_features_count+=success
+                        errors_count+=errors
+                        audio_batch=[]
+                        logging.info(f"Processed audio features batch: {success} success, {errors} errors")
+                    
                 else:
                     error_logger.error(f"Unknown message source: {message.get('source', 'Unknown')}",
                     extra={'operation': 'message_processing', 'message_source': message.get('source', 'unknown'),
                             'message_keys': list(message.keys()) if isinstance(message, dict) else 'not_dict'})
                     error_count+=1
-                # Summary statistics
-                logging.info("=" * 60)
-                logging.info("ETL PROCESS STATUS - SUMMARY")
-                logging.info("=" * 60)
-                logging.info(f"Last.fm records processed: {lastfm_count}")
-                logging.info(f"Spotify records processed: {spotify_count}")
-                logging.info(f"Audio Feature records processed: {audio_features_count}")
-                logging.info(f"Total records processed: {lastfm_count + spotify_count + audio_features_count}")
-                logging.info(f"Errors encountered: {errors_count}")
-                logging.info("=" * 60)
-            except Exception as e:
-                error_logger.error(f'An error occurred while processing the message: {e}',extra={
-                        'operation': 'message_processing','message_source': message.get('source', 'unknown') if isinstance(message, dict) else 'not_dict',
-                        'error_type': type(e).__name__, 'error_details': str(e)
-                    } )
-                error_count+=1
-                continue
-            
 
+            if lastfm_batch:
+                success, errors = load_lastfm_data_batch(lastfm_batch, cur)
+                success_count+=success
+                lastfm_count += success
+                errors_count += errors
+                logging.info(f"Processed final Last.fm batch: {success} success, {errors} errors")
 
-                
+            if spotify_batch:
+                success, errors = load_spotify_data_batch(spotify_batch, cur)
+                spotify_count += success
+                success_count+=success
+                errors_count += errors
+                logging.info(f"Processed final Spotify batch: {success} success, {errors} errors")
+
+            if audio_batch:
+                success, errors = load_audio_features_batch(audio_batch, cur)
+                audio_features_count += success
+                errors_count += errors
+                success_count+=success
+                logging.info(f"Processed final Audio batch: {success} success, {errors} errors")
             
-                
-                
+            logging.info("=" * 60)
+            logging.info("ETL PROCESS STATUS - SUMMARY")
+            logging.info("=" * 60)
+            logging.info(f"Last.fm records processed: {lastfm_count}")
+            logging.info(f"Spotify records processed: {spotify_count}")
+            logging.info(f"Audio Feature records processed: {audio_features_count}")
+            logging.info(f"Total records processed: {lastfm_count + spotify_count + audio_features_count}")
+            logging.info(f"Errors encountered: {errors_count}")
+            logging.info("=" * 60) 
+        except KeyboardInterrupt:
+            logging.info("ETL interrupted by user")
+        except Exception as e:
+            error_logger.error(f"ETL process failed: {e}")
     finally:
+        conn.commit()
         cur.close()
         conn.close()
-        consumer.close()
-        logging.info("Database connections and consumer closed")
+                
+       
+                
+
+
+                
+            
+                
+   
 
 

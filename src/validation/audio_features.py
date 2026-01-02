@@ -75,9 +75,6 @@ class AudioFeatures(BaseModel):
         return stripped
 
 
-
-        
-
     @model_validator(mode='after')
     def validate_danceability(cls, model):
         tempo_normalized= min(model.bpm/200.0, 1.0)

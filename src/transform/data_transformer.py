@@ -64,6 +64,9 @@ def transform_spotify_data(track):
     if not all([data['artist_id'], data['song_name'],data['artist_name'],data['popularity'],data['album_id'], data['album_title']]):
         print('Missing required fields, skipping this instance')
         return None
+    if track.get('duration_ms', 0)>10800000:
+        print(f"Skipping {track.get('name', 'Unknown')}, the length is too long")
+        return None
     data['album_type']= safe_string(track.get('album_type', None))
     data['is_playable']= bool(track.get('is_playable', False))
     data['release_date']= safe_string(track.get('release_date', None))
@@ -78,6 +81,7 @@ def transform_spotify_data(track):
     if data['duration_ms']>0:
         data['duration_seconds']= safe_int(data['duration_ms']//1000)
         data['duration_minutes']= round(safe_float(data['duration_seconds']/60),2)
+    
     data['song_id']= safe_string(track.get('song_id', None))
     
     data['source']= 'Spotify'
@@ -102,8 +106,9 @@ def transform_audio_features_data(track):
     tempo_normalized= min(data['bpm']/200, 1.0)
     data['danceability'] = round(safe_float((tempo_normalized*.3)+(data['energy']*.5)+(data['zero_crossing_rate']*.2)),5)
     data['preview_url'] = safe_string(track.get('preview_url', None)).strip()
-    data['harmonic_ratio']= max(round(safe_float(track.get('harmonic_ratio', 0)),5),1.0)
-    data['percussive_ratio']=max(round(safe_float(track.get('percussive_ratio', 0)),5),1.0)
+    data['harmonic_ratio']= min(round(safe_float(track.get('harmonic_ratio', 0)),5),1.0)
+    data['percussive_ratio']=min(round(safe_float(track.get('percussive_ratio', 0)),5),1.0)
+    print(data['percussive_ratio'])
     data['source']= safe_string(track.get('source', 'preview_url'), default='preview_url')
     print(data)
     return data

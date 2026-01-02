@@ -29,22 +29,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # SQL 
 # -------------------------------
 def generate_artists_lists(cur):
-    """
-    Generate sets of existing artists and similar artists from the database.
-
-    This function queries the database to retrieve all artist names and similar artist
-    names that haven't been processed yet (don't exist in the artists table), returning
-    them as sets for easier lookup and to prevent duplicates when processing new data.
-
-    Args:
-        cur: Database cursor
-        
-    Returns:
-        tuple:
-            similar_artists (set): Set of similar artist names that haven't been processed yet.
-            artists (list): List of all artist names from the `artists` table.
-            artists_set (set): Set of normalized artist names for quick lookup.
-    """
     # Only get similar artists that don't already exist in the artists table
     cur.execute("""
         SELECT DISTINCT similar_artist_name 

@@ -17,7 +17,8 @@ lastfm_song_query = ("INSERT INTO songs(song_name,song_id, song_listeners, artis
                  "ON CONFLICT (song_id) DO UPDATE SET "
                  "song_listeners = EXCLUDED.song_listeners, "
                  "engagement_ratio = EXCLUDED.engagement_ratio, "
-                 "mbid = EXCLUDED.mbid;")
+                 "mbid = EXCLUDED.mbid, "
+                 "updated_at = CURRENT_TIMESTAMP; ")
                  
 lastfm_artist_query = ("INSERT INTO artists(artist_name,artist_id, on_tour, total_listeners, total_playcount, plays_per_listener) "
             "VALUES (%s,%s, %s, %s, %s, %s) "
@@ -25,24 +26,9 @@ lastfm_artist_query = ("INSERT INTO artists(artist_name,artist_id, on_tour, tota
             "SET on_tour = EXCLUDED.on_tour, "
             "total_listeners = EXCLUDED.total_listeners,"
             "total_playcount = EXCLUDED.total_playcount,"
-            "plays_per_listener=EXCLUDED.plays_per_listener;")
+            "plays_per_listener=EXCLUDED.plays_per_listener, "
+            "updated_at = CURRENT_TIMESTAMP; ")
 
-'''
-lastfm_album_query = ("INSERT INTO albums(album_id, album_title, artist_name) "
-            "VALUES (%s,%s, %s) "
-            "ON CONFLICT (album_title, artist_name) DO UPDATE "
-            "SET album_id = EXCLUDED.album_id " \
-            "RETURNING album_id; "
-            )
-
-lastfm_tags_query = ("INSERT INTO tags(song_name,artist_id,tag) "
-            "VALUES (%s,%s, %s) "
-            "ON CONFLICT (song_name, artist_id,tag) DO NOTHING; "
-            )
-lastfm_similar_artist_query =("INSERT INTO similar_artists(artist_name, similar_artist_name) "
-            "VALUES (%s, %s) "
-            "ON CONFLICT (artist_name, similar_artist_name) DO NOTHING ;"
-            )'''
 
 spotify_song_query=('INSERT INTO songs(song_name, artist_id, duration_ms, duration_seconds, duration_minutes, release_date, release_date_precision, is_explicit, popularity, track_number, song_id, album_id, is_playable) '
                    'VALUES(%s,%s,%s ,%s,%s,%s,%s,%s,%s,%s, %s, %s, %s) ' \
@@ -57,17 +43,21 @@ spotify_song_query=('INSERT INTO songs(song_name, artist_id, duration_ms, durati
                     'popularity= EXCLUDED.popularity,' \
                     'track_number= EXCLUDED.track_number,' \
                     'is_playable = EXCLUDED.is_playable, '
-                    'album_id = EXCLUDED.album_id;'
+                    'album_id = EXCLUDED.album_id, '
+                    'updated_at = CURRENT_TIMESTAMP; '
                    )
 spotify_album_query=('INSERT INTO albums(album_title, artist_id,album_type, album_total_tracks, album_id) '
                     'VALUES(%s,%s,%s,%s, %s) '
                     'ON CONFLICT (album_id) DO UPDATE '
                     'SET album_type = EXCLUDED.album_type,'
-                    'album_total_tracks = EXCLUDED.album_total_tracks')
+                    'album_total_tracks = EXCLUDED.album_total_tracks, '
+                    'updated_at = CURRENT_TIMESTAMP;')
 
 spotify_artist_query= ('INSERT INTO artists (artist_id, artist_name) '
                         'VALUES(%s,%s) '
-                        'ON CONFLICT (artist_id) DO NOTHING '
+                        'ON CONFLICT (artist_id) DO UPDATE SET '
+                        'artist_name = EXCLUDED.artist_name, '
+                        'updated_at = CURRENT_TIMESTAMP; '
                         )
 
 
