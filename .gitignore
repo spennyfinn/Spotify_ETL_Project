@@ -43,3 +43,6 @@ logs/
 *.temp
 
 h.py
+exports/
+test_rate_limiting.py
+guides/

@@ -1,6 +1,6 @@
 
 from kafka import producer
-from src.utils.kafka_utils import consume_message, create_consumer, create_producer, flush_kafka_producer, send_through_kafka
+from src.utils.kafka_utils import consume_message, create_consumer, create_producer, flush_kafka_producer, safe_batch_send, send_through_kafka
 from src.validation.audio_features import AudioFeatures
 from src.validation.lastfm import LastFm
 from src.validation.spotify import Spotify_Data
@@ -148,7 +148,7 @@ if __name__=='__main__':
                     validated_data = Spotify_Data(**transformed_data)
                 else:
                     continue
-            send_through_kafka(transformed_data, 'music_transformed', producer)
+            safe_batch_send([transformed_data], 'music_transformed', producer, batch_size=5)
     
 
         

@@ -1,17 +1,17 @@
 
 
-remove tables tags and artists alike
 
+audio features e2e tests
+validation for audio features -- ratios
+fix kafka
+rename tables 
 
-get random word gen
-merge confests
 
 
 
 
 current:
-log errors in load stage
-  
+
     
 
 
@@ -26,3 +26,11 @@ reworking transform function into modular functions
 fix the dictionary indexing and replace with get in lastfm extraction
 fix mbid None value --> vali --> tests
 engagement ratiop doesnt have to be 0-1
+remove tables tags and artists alike
+get random word gen
+harmonic ratio vs percusive ratio
+move queries to another file
+merge conftests
+log errors in load stage
+batch audio features processing
+  

@@ -2,7 +2,7 @@
 import requests
 import os
 import json
-from src.utils.kafka_utils import create_producer, flush_kafka_producer, send_through_kafka
+from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send, send_through_kafka
 from src.utils.text_utils import normalize_song_name, similarity_score
 from src.utils.database import get_db
 from dotenv import load_dotenv
@@ -210,10 +210,12 @@ if __name__ == '__main__':
         track_error_count =0
         track_success_count=0
         #query database for song and artist names where there is missing lastfm data
-        cur.execute('SELECT s.song_name, a.artist_name,s.song_id, s.artist_id FROM songs AS s JOIN artists AS a ON s.artist_id=a.artist_id WHERE s.engagement_ratio IS NULL order by popularity desc')
+        cur.execute('SELECT s.song_name, a.artist_name,s.song_id, s.artist_id FROM songs AS s JOIN artists AS a ON s.artist_id=a.artist_id WHERE s.engagement_ratio IS NULL order by s.created_at desc')
         res=cur.fetchall()
         cpu_count= multiprocessing.cpu_count()
-        max_workers = max(4, cpu_count)
+        max_workers = max(8, cpu_count)
+        pending_batch = []
+        batch_size = 5
 
         with ProcessPoolExecutor(max_workers=max_workers) as w:
             futures = {w.submit(process_last_fm_data, song_name, artist_name, song_id, artist_id, key):(song_name, artist_name, song_id,artist_id) for song_name, artist_name, song_id, artist_id in res}
@@ -225,8 +227,13 @@ if __name__ == '__main__':
                     data= future.result(timeout=60)
                     print(f"DTAA: {data}")
                     if data:
-                        send_through_kafka(data, 'lastfm_artist', producer)
-                        track_success_count+=1
+                        pending_batch.append(data)
+                        if len(pending_batch) >= batch_size:
+                            successful, failed = safe_batch_send(pending_batch, 'lastfm_artist', producer, batch_size=batch_size)
+                            track_success_count += successful
+                            track_error_count += failed
+                            print(f'Batch sent: {successful} success, {failed} failed')
+                            pending_batch.clear()
                         print(f'Sent {song_name} through kafka')
                     else:
                         track_error_count+=1
@@ -235,6 +242,13 @@ if __name__ == '__main__':
                     print(f"There was an error gettting the data from lastfm: {e}")
             
                 
+
+        if pending_batch:
+            successful, failed = safe_batch_send(pending_batch, 'lastfm_artist', producer, batch_size=batch_size)
+            track_success_count += successful
+            track_error_count += failed
+            print(f'Final batch sent: {successful} success, {failed} failed')
+
 
         print(f"Track Success count: {track_success_count}")
         print(f"Track Error count: {track_error_count}")
