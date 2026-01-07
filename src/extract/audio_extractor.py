@@ -8,7 +8,7 @@ import numpy as np
 from io import BytesIO
 from src.extract.lastfm_extractor import send_through_kafka
 from src.utils.database import get_db
-from src.utils.kafka_utils import create_producer, flush_kafka_producer
+from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send
 from concurrent.futures import as_completed, TimeoutError, ProcessPoolExecutor
 import multiprocessing
 import gc
@@ -153,8 +153,10 @@ if __name__ == "__main__":
     producer = create_producer('music-streaming-producer')
     song_artists=get_songs_and_artists(cur)
     print(len(song_artists))
+    pending_batch = []
+    batch_size = 5
     cpu_count = multiprocessing.cpu_count()
-    max_workers = min(4, cpu_count)
+    max_workers = min(8, cpu_count)
 
     with ProcessPoolExecutor(max_workers=max_workers) as w:
         futures= { w.submit(get_audio_features, song, artist, song_id): (song, artist, song_id) for song, artist, song_id in song_artists}
@@ -164,7 +166,11 @@ if __name__ == "__main__":
                 song, artist, song_id = futures[future]
                 data= future.result(timeout=120)
                 if data:
-                    send_through_kafka(data, 'music_audio_features', producer)
+                    pending_batch.append(data)
+                    if len(pending_batch) >= batch_size:
+                        successful, failed = safe_batch_send(pending_batch, 'music_audio_features', producer, batch_size=batch_size)
+                        print(f'Batch sent: {successful} success, {failed} failed')
+                        pending_batch.clear()
                     print(f'{song} by {artist} was processed')
                 else:
                     print(f'There was an error processing {song} by {artist}')
@@ -175,5 +181,9 @@ if __name__ == "__main__":
             except Exception as e:
                 song, artist, song_id = futures[future]
                 print(f"There was an error while processing {song} by {artist}: {e}")
+    # send any remaining messages
+    if pending_batch:
+        successful, failed = safe_batch_send(pending_batch, 'music_audio_features', producer, batch_size=batch_size)
+        print(f'Final batch sent: {successful} success, {failed} failed')
     flush_kafka_producer(producer)
     print(f'All {len(song_artists)} songs were processed')

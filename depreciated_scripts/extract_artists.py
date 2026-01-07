@@ -46,20 +46,6 @@ def generate_artists_lists(cur):
     return similar_artists, artists, artists_set
 
 def insert_similar_artists(similar_artists: list, artist: str, artists_set: set, cur, similar_artist_query):
-    """
-    Insert similar artist relationships into the database.
-
-    For a given artist, this function iterates through a list of similar artists and inserts
-    each pair into the `similar_artists` table using the provided query and database cursor.
-    Only inserts relationships if the artist exists in the artists table.
-
-    Args:
-        similar_artists (list): List of artist names similar to the given artist.
-        artist (str): The main artist name for whom similar artists are being inserted.
-        artists_set (set): Set of artist names that exist in the database.
-        cur: Database cursor object used to execute SQL commands.
-        similar_artist_query (str): SQL query string for inserting into the `similar_artists` table.
-    """
     # Normalize the artist name to match database format
     normalized_artist = normalize_str(artist)
     
@@ -79,24 +65,7 @@ def insert_similar_artists(similar_artists: list, artist: str, artists_set: set,
 
 
 def add_similar_artists(similar_artists:set, artists:list, artists_set:set, cur):
-    """
-Add and insert similar artists into the database if they do not already exist.
 
-This function iterates over a list of similar artist names, normalizes them, fetches
-additional artist data via the API, calculates derived metrics, prepares database rows,
-inserts the artist into the artists table, and updates the similar_artists relationships.
-
-Args:
-    similar_artists (set): set of artist names considered similar to a main artist.
-    artists (list): List of already processed/inserted artist names to avoid duplicates.
-    artists_set (set): Set of normalized artist names for foreign key checking.
-    cur: Database cursor
-
-Side Effects:
-    - Fetches artist data from an external API.
-    - Inserts data into the artists and similar_artists tables via the `cur` cursor.
-    - Updates the `artists` list and `artists_set` with newly added artists.
-"""
     for similar_artist in similar_artists:
         normalized_similar_artist = normalize_str(similar_artist)
         if normalized_similar_artist not in artists_set:
