@@ -7,12 +7,12 @@ import responses
 import json
 from src.extract.lastfm_extractor import get_track_from_lastfm, match_artists_from_lastfm
 from src.transform.data_transformer import transform_lastfm_data, transform_spotify_data
-from src.extract.spotify_extractor import extract_main_spotify_data
-from src.utils.spotify_utils import extract_spotify_data, get_spotify_token, save_token, load_token
-from src.validation.lastfm import LastFm
-from src.validation.spotify import Spotify_Data
+from src.extract.spotify_track_extractor import extract_main_spotify_data
+from src.utils.spotify_api_utils import extract_spotify_data, get_spotify_token, save_token, load_token
+from src.validate.lastfm_validator import LastFmData
+from src.validate.spotify_track_validator import SpotifyTrackData
 from src.load.data_loader import load_spotify_data, load_audio_features, load_last_fm 
-from src.utils.database import get_db, get_result_from_db_lastfm, get_result_from_db_spotify
+from src.utils.database_utils import get_db, get_result_from_db_lastfm, get_result_from_db_spotify
 from unittest.mock import patch, MagicMock
 
 
@@ -51,7 +51,7 @@ def test_spotify_pipeline_end_to_end(mock_spotify_api):
                         assert field in transformed_data
                         assert transformed_data[field] is not None
 
-                    validated_data=Spotify_Data(**transformed_data)
+                    validated_data=SpotifyTrackData(**transformed_data)
                     assert validated_data is not None
                     
                     load_spotify_data(transformed_data, cur)
@@ -149,7 +149,7 @@ def test_last_fm_pipeline_end_to_end(mock_lastfm_api):
         assert transformed_data['engagement_ratio']== round(float(transformed_data['num_song_listeners']/transformed_data['artist_total_listeners']),5)
         assert transformed_data['plays_per_listener']== round(float(transformed_data['artist_total_playcount']/transformed_data['artist_total_listeners']),5)
 
-        validated_data=LastFm(**transformed_data)
+        validated_data=LastFmData(**transformed_data)
         assert validated_data is not None
         assert validated_data.song_name=='as it was'
         assert validated_data.artist_name=='harry styles'

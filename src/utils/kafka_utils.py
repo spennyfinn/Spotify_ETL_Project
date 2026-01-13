@@ -4,6 +4,8 @@ import json
 import os
 from confluent_kafka import Consumer, Producer
 
+logger = logging.getLogger(__name__)
+
 
 
 # -------------------------------
@@ -11,7 +13,7 @@ from confluent_kafka import Consumer, Producer
 # -------------------------------
 def get_consumer_config(group_id: str):
     return{
-        'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", 'localhost:9092'),
+        'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", 'localhost:9094'),
         'group.id': group_id,
         'auto.offset.reset': "earliest",
         'enable.auto.commit': True,
@@ -20,7 +22,7 @@ def get_consumer_config(group_id: str):
 
 def get_producer_config(client_id:str):
     return {
-        'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092'),
+        'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9094'),
         'client.id': client_id,
         'acks': 'all',
         'retries': 3,
@@ -116,7 +118,7 @@ def send_through_kafka(track:dict, topic_name:str, producer:Producer):
     try:
         track_json = json.dumps(track)
     except (json.JSONDecodeError, TypeError) as e:
-        print(f"JSON serialization error for track: {e}")
+        logger.error(f"JSON serialization error for track: {e}")
         return False
 
     # Determine key and display name based on topic
@@ -132,8 +134,14 @@ def send_through_kafka(track:dict, topic_name:str, producer:Producer):
     elif topic_name == 'music_audio_features':
         key = track.get('song_id', 'unknown')
         display_name = track.get('song_id', 'Unknown ID')
+    elif topic_name == 'artist_data':
+        key= track.get('artist_id', 'unknown')
+        display_name = track.get('artist_name', 'Unknown Artists')
+    elif topic_name == 'artist_genres':
+        key = track.get('artist_id', 'unknown')
+        display_name = track.get('artist_name', 'Unknown Artist')
     else:
-        print(f'Unknown topic_name: {topic_name}')
+        logger.error(f'Unknown topic_name: {topic_name}')
         return False
 
     try:
@@ -143,49 +151,36 @@ def send_through_kafka(track:dict, topic_name:str, producer:Producer):
         # Poll to handle delivery reports and free up queue space
         producer.poll(0)
 
-        print(f"Message queued: {display_name} through {topic_name}")
+        logger.debug(f"Message queued: {display_name} through {topic_name}")
         return True
 
     except BufferError as e:
         # Queue is full - this is the "Local: Queue full" error
-        print(f"Queue full for {display_name}, flushing and retrying...")
+        logger.warning(f"Queue full for {display_name}, flushing and retrying...")
         try:
             # Flush existing messages to free up space
             producer.flush(timeout=5.0)
             # Retry once
             producer.produce(topic=topic_name, key=key, value=track_json)
             producer.poll(0)
-            print(f"Message queued after flush: {display_name} through {topic_name}")
+            logger.info(f"Message queued after flush: {display_name} through {topic_name}")
             return True
         except Exception as retry_e:
-            print(f"Failed to send {display_name} even after flush: {retry_e}")
+            logger.error(f"Failed to send {display_name} even after flush: {retry_e}")
             return False
 
     except Exception as e:
         error_msg = str(e)
         if "Local: Queue full" in error_msg:
-            print(f"Local queue full for {display_name}. Consider reducing producer rate.")
+            logger.warning(f"Local queue full for {display_name}. Consider reducing producer rate.")
         else:
-            print(f"Failed to send {display_name}: {error_msg}")
+            logger.error(f"Failed to send {display_name}: {error_msg}")
         return False
 
 
 def flush_kafka_producer(producer:Producer):
     """Flush all queued messages to Kafka."""
     producer.flush()
-
-
-def get_producer_queue_status(producer: Producer) -> dict:
-    """Get current producer queue statistics."""
-    try:
-        # Get queue length (approximate)
-        # Note: This is a rough estimate as confluent-kafka doesn't expose direct queue metrics
-        return {
-            'status': 'active',
-            'note': 'Queue monitoring available via producer.flush() and error handling'
-        }
-    except Exception as e:
-        return {'status': 'error', 'error': str(e)}
 
 
 def safe_batch_send(tracks: list, topic_name: str, producer: Producer, batch_size: int = 10) -> tuple:

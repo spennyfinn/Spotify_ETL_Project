@@ -5,7 +5,7 @@ from typing import Any
 
 
 
-class Spotify_Data(BaseModel):
+class SpotifyTrackData(BaseModel):
     album_type: Any 
     is_playable: Any
     album_id: Any
@@ -84,7 +84,7 @@ class Spotify_Data(BaseModel):
         if value is None or type(value) is not int:
             raise TypeError(f'{info.field_name} should be a whole number, but got {type(value).__name__}')
         if value < 0 or value > 100:
-            raise ValueError(f'{info.field_name} represents a percentage, so it must be between 0 and 100 (got {value})')
+            raise ValueError(f'{info.field_name}  must be between 0 and 100 (got {value})')
         return int(value)
         
 

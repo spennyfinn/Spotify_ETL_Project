@@ -8,22 +8,7 @@ load_dotenv()
 
 
 
-def export_table_to_csv_copy(table, query, filename):
-    conn, cur=get_db()
-
-    try:
-        os.makedirs(os.path.dirname(filename), exist_ok= True)
-
-        copy_query = f"COPY ({query}) TO STDOUT WITH CSV HEADER"
-
-        with open(filename, 'w', encoding='utf-8') as f:
-            cur.copy_expert(copy_query, f)
-        
-    except Exception as e:
-        print(f"Error exporting {table}: {e}")
-    finally:
-        conn.close()
-        cur.close()
+from src.utils.database import export_table_to_csv_copy
 
 def copy_all_tables():
     artist_query = 'SELECT * from artists ORDER BY artist_name'

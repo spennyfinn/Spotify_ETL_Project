@@ -9,9 +9,9 @@ import json
 from confluent_kafka import Producer
 from urllib.parse import quote
 from src.utils.kafka_utils import create_producer
-from src.utils.text_utils import normalize_song_name, similarity_score, has_collaborators, extract_collaborators
-from src.utils.spotify_utils import get_spotify_token
-from src.utils.database import get_db, get_song_needing_spotify_data
+from src.utils.text_processing_utils import normalize_song_name, similarity_score, has_collaborators, extract_collaborators
+from src.utils.spotify_api_utils import get_spotify_token
+from src.utils.database_utils import get_db, get_song_needing_spotify_data
 from src.utils.transformer_utils import determine_missing_fields
 # -------------------------------
 # Environment Configuration
