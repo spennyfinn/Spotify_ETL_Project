@@ -3,8 +3,12 @@
 
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def parse_lastfm_message(data):
-    print(f'PARSER: {data}')
+    logger.debug(f'Parsing Last.fm message: {data}')
     if type(data) is not dict:
         raise TypeError(f'The input data should be a dictionary but it was {type(data)}')
 
@@ -78,7 +82,7 @@ def parse_spotify_message(data):
             data['artist_name']
 
         ]
-        print(artist)
+        logger.debug(f'Parsed artist data: {artist}')
         return song, album, artist
 
     except (KeyError, TypeError, ValueError) as e:

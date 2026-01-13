@@ -1,5 +1,5 @@
 import pytest
-from src.utils.text_utils import extract_collaborators, has_collaborators, normalize_song_name, similarity_score
+from src.utils.text_processing_utils import extract_collaborators, has_collaborators, normalize_song_name, similarity_score
 import re
 import hypothesis.strategies as st
 from hypothesis import given, settings

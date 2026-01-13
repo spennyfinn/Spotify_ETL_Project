@@ -1,5 +1,9 @@
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def safe_int(value, default=None):
     '''Safely convert to int'''
     if not value or value=='':
@@ -40,6 +44,6 @@ def safe_string(value, default=None, lowercase=False):
 def determine_missing_fields(data):
     missing = [k for k,v in data.items() if v is None]
     if missing:
-        print(f'Missing fields: {', '.join(missing)}')
+        logger.debug(f'Missing fields: {', '.join(missing)}')
         return
-    print('No missing fields')
+    logger.debug('No missing fields')

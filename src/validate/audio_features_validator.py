@@ -4,7 +4,7 @@ from pydantic import BaseModel, field_validator, model_validator
 import math
 from typing import Any
 
-class AudioFeatures(BaseModel):
+class AudioFeaturesData(BaseModel):
     song_id: Any
     bpm: Any
     energy: Any

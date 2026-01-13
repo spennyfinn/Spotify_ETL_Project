@@ -6,7 +6,7 @@ import string
 
 
 
-class LastFm(BaseModel):
+class LastFmData(BaseModel):
     song_name: Any
     artist_name: Any
     artist_name: Any

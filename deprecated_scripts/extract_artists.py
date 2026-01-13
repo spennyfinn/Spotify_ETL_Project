@@ -7,7 +7,7 @@ from src.transform.data_transformer import normalize_str
 from src.extract.lastfm_extractor import get_artist_data
 from src.load.data_loader import insert_artist_query, insert_similar_artist_query
 from flatten_json import flatten
-from src.utils.database import get_db
+from src.utils.database_utils import get_db
 from src.utils.artist_utils import load_artist_ids
 
 

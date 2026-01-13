@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Dict
 from dotenv import load_dotenv
 from spotify_preview_finder import finder
@@ -7,60 +8,40 @@ import requests
 import numpy as np
 from io import BytesIO
 from src.extract.lastfm_extractor import send_through_kafka
-from src.utils.database import get_db
+from src.utils.database_utils import get_db, get_songs_and_artists
 from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send
 from concurrent.futures import as_completed, TimeoutError, ProcessPoolExecutor
 import multiprocessing
 import gc
 
-
 load_dotenv()
 
-def get_songs_and_artists(cur)-> list:
-    '''
-    Retrieves song name, artist name and song_id from the database
-
-    Args:
-        cur (psycopg2.cursor): cursor object 
-    Returns
-        list: a list of tuples (song_name, artist_name, artist_id, song_id ) or None if the database is empty
-    '''
-    cur.execute('SELECT s.song_name, a.artist_name, s.song_id '
-                'FROM songs s '
-                'JOIN artists a ON a.artist_id = s.artist_id '
-                'LEFT JOIN song_audio_features af ON af.song_id = s.song_id '
-                'WHERE af.song_id IS NULL '
-                'LIMIT 10000;'
-                )
-    result = cur.fetchall()
-    return result
-
-
+logger = logging.getLogger(__name__)
 
 def get_audio_features(song_name, artist_name, song_id)-> Dict:
     try:
         
         my_finder = finder
         search_query = f"{song_name} {artist_name}"
-        print(f'Song ID:{song_id}')
+        logger.debug(f'Processing song ID: {song_id}')
         # Check what methods are available
         result = my_finder.search_and_get_links(song_name=search_query, client_id=os.getenv('SPOTIFY_CLIENT_ID'), client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"), limit=1)
-        #print(result)
+        # Debug: print(result)
 
         if not result['results']:
-            print(f"There was no preview url for {song_name} by {artist_name}")
+            logger.warning(f"No preview URL found for {song_name} by {artist_name}")
             return None
         preview_url = result['results'][0]['previewUrl']
         if result['success']!= True:
-            print(f"There is not a preview url available for {song_name} by {artist_name}")
+            logger.warning(f"Preview URL not available for {song_name} by {artist_name}")
             return None
 
         try:
             resp = requests.get(preview_url)
         except requests.ConnectionError as e:
-            print(f"There was a connection error when calling {song_name}")
+            logger.error(f"Connection error when fetching {song_name}: {e}")
         except requests.exceptions.RequestException as e:
-            print(f"API error for {song_name}: {e}")
+            logger.error(f"API error for {song_name}: {e}")
             return None
 
         if resp:
@@ -69,40 +50,40 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
             try:
                 y, sr =librosa.load(audio_data)
             except Exception as e:
-                print(f"The extraction of audio features for {song_name} was unsuccessful")
+                logger.error(f"Audio feature extraction failed for {song_name}: {e}")
                 return None
 
             if len(y) ==0 or sr==0:
-                print(f"Invalid audio data for {song_name}")
+                logger.warning(f"Invalid audio data for {song_name}")
                 return None
             try:
                 bpm, beats = librosa.beat.beat_track(y=y, sr=sr)
                 if isinstance(bpm, float):
                     bpm = [bpm]
-                print(f'BPM: {bpm}')
+                logger.debug(f'Extracted BPM: {bpm}')
             except Exception as e:
-                print(f"BPM was unable to be extracted for {song_name}: {e}")
+                logger.error(f"BPM extraction failed for {song_name}: {e}")
                 return None
             try:
                 rms = librosa.feature.rms(y=y)[0]
                 energy = np.mean(rms)
-                print(f"Energy: {energy}")
+                logger.debug(f"Extracted energy: {energy}")
             except Exception as e:
-                print(f"Energy was unable to be extracted for {song_name}: {e}")
+                logger.error(f"Energy extraction failed for {song_name}: {e}")
                 return None
             try:
                 spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
                 centroid_mean = np.mean(spectral_centroid)
-                print(f'Brightness: {centroid_mean}')
+                logger.debug(f'Extracted spectral centroid (brightness): {centroid_mean}')
             except Exception as e:
-                print(f"Spectral Centroid was unable to be extracted for {song_name}: {e}")
+                logger.error(f"Spectral centroid extraction failed for {song_name}: {e}")
                 return None
             try:
                 zcr = librosa.feature.zero_crossing_rate(y)[0]
                 zcr_mean= np.mean(zcr)
-                print(f"Percussiveness: {zcr_mean}")
+                logger.debug(f"Extracted ZCR (percussiveness): {zcr_mean}")
             except Exception as e:
-                print(f"ZCR was unable to be extracted for {song_name}: {e}")
+                logger.error(f"ZCR extraction failed for {song_name}: {e}")
                 return None
 
             try:
@@ -111,17 +92,17 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
                 percussive_raw = (sum(abs(y_percussive)))
                 total= harmonic_raw + percussive_raw
 
-                if total <=0: 
-                    print("The sum of percussive ratio and harmonic ratio should be above 0")
+                if total <=0:
+                    logger.warning("Invalid harmonic/percussive ratio calculation for {song_name}")
                     return None
 
                 harmonic_ratio = (sum(abs(y_harmonic))/total)
                 percussive_ratio = (sum(abs(y_percussive))/total)
 
-                print(f"Harmonic Ratio: {harmonic_ratio}")
-                print(f"Percussive Ratio: {percussive_ratio}")
+                logger.debug(f"Extracted harmonic ratio: {harmonic_ratio}")
+                logger.debug(f"Extracted percussive ratio: {percussive_ratio}")
             except Exception as e:
-                print(f"Harmonic Ratio and Percussive Ratio were unable to be extracted for {song_name}: {e}")
+                logger.error(f"Harmonic/percussive ratio extraction failed for {song_name}: {e}")
                 return None
 
             
@@ -142,7 +123,7 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
             return data
     except Exception as e:
         gc.collect()
-        print(f"There was an error retrieving audio features for {song_name}: {e}")
+        logger.error(f"Audio feature retrieval failed for {song_name}: {e}")
         return None
             
 
@@ -152,7 +133,7 @@ if __name__ == "__main__":
     conn, cur=get_db()
     producer = create_producer('music-streaming-producer')
     song_artists=get_songs_and_artists(cur)
-    print(len(song_artists))
+    logger.info(f"Starting audio feature extraction for {len(song_artists)} songs")
     pending_batch = []
     batch_size = 5
     cpu_count = multiprocessing.cpu_count()
@@ -169,21 +150,20 @@ if __name__ == "__main__":
                     pending_batch.append(data)
                     if len(pending_batch) >= batch_size:
                         successful, failed = safe_batch_send(pending_batch, 'music_audio_features', producer, batch_size=batch_size)
-                        print(f'Batch sent: {successful} success, {failed} failed')
+                        logger.info(f'Batch sent: {successful} success, {failed} failed')
                         pending_batch.clear()
-                    print(f'{song} by {artist} was processed')
+                    logger.debug(f'Processed: {song} by {artist}')
                 else:
-                    print(f'There was an error processing {song} by {artist}')
+                    logger.warning(f'Failed to process: {song} by {artist}')
             except TimeoutError:
                 song, artist, song_id = futures[future]
-                print(f"There was a timeout error while processing {song} by {artist}")
-            
+                logger.error(f"Timeout processing {song} by {artist}")
+
             except Exception as e:
                 song, artist, song_id = futures[future]
-                print(f"There was an error while processing {song} by {artist}: {e}")
-    # send any remaining messages
+                logger.error(f"Error processing {song} by {artist}: {e}")
     if pending_batch:
         successful, failed = safe_batch_send(pending_batch, 'music_audio_features', producer, batch_size=batch_size)
-        print(f'Final batch sent: {successful} success, {failed} failed')
+        logger.info(f'Final batch sent: {successful} success, {failed} failed')
     flush_kafka_producer(producer)
-    print(f'All {len(song_artists)} songs were processed')
+    logger.info(f'Audio feature extraction completed for {len(song_artists)} songs')

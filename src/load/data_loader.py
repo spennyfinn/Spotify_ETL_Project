@@ -1,18 +1,18 @@
 
 
-from src.logging_config import error_logger
+from config.logging import error_logger
 import psycopg2
 from dotenv import load_dotenv
 import logging
 
-from src.utils.database import get_db
+from src.utils.database_utils import get_db
 from src.utils.kafka_utils import consume_message, create_consumer
 from src.load.parsers import parse_audio_features_data, parse_lastfm_message, parse_spotify_message
-from src.utils.spotify_utils import  spotify_album_query, spotify_artist_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
+from src.utils.spotify_api_utils import  spotify_album_query, spotify_artist_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
 
 
 load_dotenv()
-
+logger= logging.getLogger(__name__)
 
 # -------------------------------
 # Logging Configs
@@ -124,7 +124,7 @@ def load_spotify_data_batch(songs,cur):
                     error_logger.error(f"Failed to insert Spotify album: {e}")
                     error_count+=1
     if song_batch: 
-        print(f'song_batch, {song_batch}')
+        logger.debug(f'Song batch: {song_batch}')
         try:
             cur.executemany(spotify_song_query, song_batch)
             logging.info(f'Spotify song batch inserted')
@@ -204,7 +204,7 @@ if __name__=='__main__':
             for message in consume_message(consumer, ['music_transformed']):
             
                 message= message[1]
-                print(message)
+                logger.debug(f'ETL message: {message}')
                 if message['source']== 'Lastfm':
                     lastfm_batch.append(message)
                     if len(lastfm_batch)>= batch_size:
