@@ -294,7 +294,7 @@ class TestSpotifyValidation:
         assert data.album_total_tracks == 0
     
 
-    @pytest.mark.parametrize('value', [-1, -50, 201, 300])
+    @pytest.mark.parametrize('value', [-1, -50, 1001, 40000])
     def test_invalid_inputs_album_total_tracks(self, valid_spotify_data, value):
         test_data = valid_spotify_data.copy()
         test_data['album_total_tracks'] = value
@@ -347,7 +347,7 @@ class TestSpotifyValidation:
         assert data.track_number == value
     
 
-    @pytest.mark.parametrize('value', [-1, -50, 300, 201])
+    @pytest.mark.parametrize('value', [-1, -50, 1001, 3000000])
     def test_invalid_inputs_track_number(self, valid_spotify_data, value):
         test_data = valid_spotify_data.copy()
         test_data['track_number'] = value

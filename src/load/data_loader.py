@@ -7,8 +7,8 @@ import logging
 
 from src.utils.database_utils import get_db
 from src.utils.kafka_utils import consume_message, create_consumer
-from src.load.parsers import parse_audio_features_data, parse_lastfm_message, parse_spotify_message
-from src.utils.spotify_api_utils import  spotify_album_query, spotify_artist_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
+from src.load.parsers import parse_artist_data, parse_audio_features_data, parse_lastfm_message, parse_spotify_message
+from src.utils.spotify_api_utils import  insert_artist_data_query, insert_genres_query, spotify_album_query, spotify_artist_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
 
 
 load_dotenv()
@@ -35,7 +35,7 @@ def load_lastfm_data_batch(lastfm_batch, cur):
             artist_batch.append(artist)
             song_batch.append(song)
         except Exception as e:
-            error_logger.error(f"Failed to parse Last.fm message: {e}", extra={'operation': 'lastfm_parse', 'message': str(message)[:200]})
+            error_logger.error(f"Failed to parse Last.fm message: {e}", extra={'operation': 'lastfm_parse', 'raw_message': str(message)[:200]})
             error_count+=1
             continue
     if artist_batch:
@@ -77,6 +77,7 @@ def load_lastfm_data_batch(lastfm_batch, cur):
 
 def load_spotify_data_batch(songs,cur):
     success_count=0
+
     error_count=0
     song_batch=[]
     artist_batch=[]
@@ -114,8 +115,6 @@ def load_spotify_data_batch(songs,cur):
             success_count+=len(album_batch)
         except Exception as e:
             error_logger.error(f"Failed to insert Spotify album batch: {e}")
-            error_count+=1
-
             for album in album_batch:
                 try:
                     cur.execute(spotify_album_query, album)
@@ -172,12 +171,98 @@ def load_audio_features_batch(batch, cur):
                     error_count+=1
 
     return success_count, error_count
-                
 
-            
-        
+def load_artist_data_batch(batch, cur):
+    artist_success_count=0
+    artist_error_count=0
+    genre_success_count=0
+    genre_error_count=0
+    artist_genre_success_count=0
+    artist_genre_error_count=0
+    artist_batch=[]
+    genres_batch=[]
+    artist_genres_batch=[]
+
+    for message in batch:
+        try:
+            artists, genres, artist_genres=parse_artist_data(message)
+            artist_batch.append(artists)
+            genres_batch.append(genres)
+            artist_genres_batch.append(artist_genres)
+        except Exception as e:
+            error_logger.error("There was an error while parsing the spotify artist data: {e}")
+            continue
+    if artist_batch:
+        try:
+            cur.executemany(insert_artist_data_query, artist_batch)
+            artist_success_count += len(artist_batch)
+        except Exception as e:
+            error_logger.error(f'There was an error while inserting the artist batch: {e}')
+            for message in artist_batch:
+                try:
+                    cur.execute(insert_artist_data_query, message)
+                    artist_success_count+=1
+                except Exception as e:
+                    error_logger.error(f'Failed to insert artist with id: {message[0]}')
+                    artist_error_count+=1
+    if genres_batch:
+        for genre_list in genres_batch:
+            try:
+                cur.executemany(insert_genres_query, genre_list)
+                genre_success_count+=len(genre_list)
+            except Exception as e:
+                error_logger.error(f'There was an error while inserting the genre batch: {e}')
+                for genre in genre_list:
+                    try:
+                        cur.execute(insert_genres_query, genre)
+                        genre_success_count+=1
+                    except Exception as e:
+                        error_logger.error(f'Failed to insert genre {genre[0]}')
+                        genre_error_count+=1
+    if artist_genres_batch:
+        try:
+            all_genre_names = set()
+            for artist_genre_list in artist_genres_batch:
+                for artist_genre in artist_genre_list:
+                    try:
+                        genre_name = artist_genre[1]
+                        if genre_name and genre_name.strip():
+                            all_genre_names.add(genre_name.strip())
+                    except (IndexError, TypeError) as e:
+                        continue
+            logger.info(f'Collected {len(all_genre_names)} unique genres for processing')
+
+        except Exception as e:
+            error_logger.error(f'Failed to collect genre names: {e}')
+            all_genre_names = set()
+       
+        if all_genre_names:
+            try:
+                placeholders= ','.join(['%s']*len(all_genre_names))
+                cur.execute(f'SELECT genre_name, genre_id FROM genres WHERE genre_name IN ({placeholders})', list(all_genre_names))
+                genre_name_to_id = dict(cur.fetchall())
+                logger.info(f'Retrieved {len(genre_name_to_id)} genre_ids')
+            except Exception as e:
+                error_logger.error(f'Failed to query genre_ids: {e}')
+    
+        for artist_genre_list in artist_genres_batch:
+            for artist_genre in artist_genre_list:
+                try:
+                    artist_id, genre_name = artist_genre
+                    genre_id = genre_name_to_id.get(genre_name)
+                    if genre_id:
+                        cur.execute('INSERT INTO artist_genres (artist_id, genre_id) '
+                                    'VALUES (%s,%s) '
+                                    'ON CONFLICT (artist_id, genre_id) DO NOTHING;', (artist_id, genre_id))
+                        artist_genre_success_count+=1
+                    else:
+                        artist_genre_error_count+=1
+                except Exception as e:
+                    error_logger.error(f'Failed to insert artist_genre {artist_genre}: {e}')
+                    artist_genres_error_count += 1
 
 
+    return artist_success_count, artist_error_count,genre_success_count,genre_error_count,artist_genre_success_count,artist_genre_error_count
 
 
 # -------------------------------
@@ -192,17 +277,18 @@ if __name__=='__main__':
         lastfm_count=0
         spotify_count=0
         audio_features_count=0
+        artist_count=0
         success_count=0
         errors_count = 0
 
         lastfm_batch=[]
         spotify_batch=[]
         audio_batch=[]
+        artist_batch=[]
         batch_size=10
 
         try:
             for message in consume_message(consumer, ['music_transformed']):
-            
                 message= message[1]
                 logger.debug(f'ETL message: {message}')
                 if message['source']== 'Lastfm':
@@ -232,6 +318,20 @@ if __name__=='__main__':
                         errors_count+=errors
                         audio_batch=[]
                         logging.info(f"Processed audio features batch: {success} success, {errors} errors")
+                elif message['source']== 'artist_genre':
+                    artist_batch.append(message)
+                    if len(artist_batch)>= batch_size:
+                        logging.info(f"Processing artist batch of {len(artist_batch)} records")
+                        a_success, a_error, g_success, g_error, ag_success, ag_error = load_artist_data_batch(artist_batch, cur)
+                        success= a_success+g_success+ag_success
+                        errors= a_error+g_error+ag_error
+
+                        logging.info(f"Artist batch results: Artists({a_success}/{a_error}) | Genres({g_success}/{g_error}) | Relationships({ag_success}/{ag_error}) | Total({success}/{errors})")
+
+                        artist_count += success
+                        errors_count += errors
+                        success_count+=success
+                        artist_batch=[]
                     
                 else:
                     error_logger.error(f"Unknown message source: {message.get('source', 'Unknown')}",
@@ -259,14 +359,27 @@ if __name__=='__main__':
                 errors_count += errors
                 success_count+=success
                 logging.info(f"Processed final Audio batch: {success} success, {errors} errors")
-            
+
+            if artist_batch:
+                logging.info(f"Processing final artist batch of {len(artist_batch)} records")
+                a_success, a_error, g_success, g_error, ag_success, ag_error = load_artist_data_batch(artist_batch, cur)
+                success= a_success+g_success+ag_success
+                errors= a_error+g_error+ ag_error
+
+                logging.info(f"Final artist batch results: Artists({a_success}/{a_error}) | Genres({g_success}/{g_error}) | Relationships({ag_success}/{ag_error}) | Total({success}/{errors})")
+
+                artist_count += success
+                errors_count += errors
+                success_count+=success
+
             logging.info("=" * 60)
             logging.info("ETL PROCESS STATUS - SUMMARY")
             logging.info("=" * 60)
             logging.info(f"Last.fm records processed: {lastfm_count}")
             logging.info(f"Spotify records processed: {spotify_count}")
             logging.info(f"Audio Feature records processed: {audio_features_count}")
-            logging.info(f"Total records processed: {lastfm_count + spotify_count + audio_features_count}")
+            logging.info(f"Artist Data records processed: {artist_count}")
+            logging.info(f"Total records processed: {lastfm_count + spotify_count + artist_count+audio_features_count}")
             logging.info(f"Errors encountered: {errors_count}")
             logging.info("=" * 60) 
         except KeyboardInterrupt:

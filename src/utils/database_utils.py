@@ -51,7 +51,7 @@ def get_song_needing_spotify_data(cur):
 
 def get_null_artist_popularity(cur):
     try:
-        cur.execute('SELECT artist_id FROM artists where artist_popularity IS NULL;')
+        cur.execute('SELECT artist_id, artist_name FROM artists where artist_popularity IS NULL ORDER BY total_playcount DESC ;')
         artist_id_list=cur.fetchall()
     except Exception as e:
         logger.error(f'Error extracting artist IDs from database: {e}')

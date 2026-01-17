@@ -78,6 +78,21 @@ insert_audio_features_query= ('INSERT INTO song_audio_features(song_id, bpm, ene
                               'percussive_ratio = EXCLUDED.percussive_ratio;'
 )
 
+insert_artist_data_query = ('INSERT INTO artists(artist_id, artist_popularity, artist_followers, artist_name, has_genres) '
+                            'VALUES (%s, %s, %s, %s, %s) '
+                            'ON CONFLICT (artist_id) DO UPDATE SET '
+                            'artist_popularity = EXCLUDED.artist_popularity, '
+                            'artist_followers = EXCLUDED.artist_followers, '
+                            'artist_name = EXCLUDED.artist_name, '
+                            'has_genres = EXCLUDED.has_genres;'
+                            )
+
+insert_genres_query=('INSERT INTO genres(genre_name) '
+                    'VALUES (%s) '
+                    'ON CONFLICT (genre_name) DO NOTHING;')
+
+
+
 
 # -------------------------------
 # TOKEN FUNCTIONS

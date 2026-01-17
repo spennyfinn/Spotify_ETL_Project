@@ -92,21 +92,21 @@ class LastFmData(BaseModel):
     
 
     @model_validator(mode='after')
-    def check_calculations(cls, model):
+    def check_calculations(self):
         "Make sure calculated fields match their expected values"
         errors = []
-        if model.artist_total_listeners is not None and model.artist_total_playcount is not None and model.plays_per_listener is not None:
-            calculated_ppl = round(model.artist_total_playcount / model.artist_total_listeners, 5)
-            if calculated_ppl != model.plays_per_listener:
-                errors.append(f"plays_per_listener doesn't match the calculation: expected {calculated_ppl}, but got {model.plays_per_listener}")
+        if self.artist_total_listeners is not None and self.artist_total_playcount is not None and self.plays_per_listener is not None:
+            calculated_ppl = round(self.artist_total_playcount / self.artist_total_listeners, 5)
+            if calculated_ppl != self.plays_per_listener:
+                errors.append(f"plays_per_listener doesn't match the calculation: expected {calculated_ppl}, but got {self.plays_per_listener}")
 
-        if model.engagement_ratio is not None and model.artist_total_listeners is not None and model.num_song_listeners is not None:
-            calculated_er = round(model.num_song_listeners / model.artist_total_listeners, 5)
-            if calculated_er != model.engagement_ratio:
-                errors.append(f"engagement_ratio doesn't match the calculation: expected {calculated_er}, but got {model.engagement_ratio}")
+        if self.engagement_ratio is not None and self.artist_total_listeners is not None and self.num_song_listeners is not None:
+            calculated_er = round(self.num_song_listeners / self.artist_total_listeners, 5)
+            if calculated_er != self.engagement_ratio:
+                errors.append(f"engagement_ratio doesn't match the calculation: expected {calculated_er}, but got {self.engagement_ratio}")
 
         if errors:
             raise ValueError("; ".join(errors))
 
-        return model
+        return self
 

@@ -4,32 +4,31 @@ import pytest
 from src.load.parsers import parse_audio_features_data,parse_lastfm_message,parse_spotify_message
 from tests.unit.constants import AUDIO_FEATURES_REQUIRED_FIELDS, LAST_FM_OPTIONAL_FIELDS, LASTFM_REQUIRED_FIELDS, SPOTIFY_OPTIONAL_FIELDS, SPOTIFY_REQUIRED_FIELDS, WRONG_DICT_TYPES, WRONG_DICT_TYPES_IDS
 class TestParsers:    
-    
 
 
     def test_valid_spotify(self, valid_spotify_data):
         '''Tests valid spotify data against the parse_spotify_message() function'''
         song, album , artist= parse_spotify_message(valid_spotify_data)
         assert song[0]=='test song'
-        assert song[1]== '1234567890123456789012'
+        assert song[1]== 'wer45poiup1234567nnpp2'
         assert song[2]== 600000
         assert song[3]== 600
-        assert song[4]== 100
+        assert song[4]== 10.0
         assert song[5]== '2023-02-02'
         assert song[6]== 'day'
         assert song[7]== True
-        assert song[8]== 99
+        assert song[8]== 70
         assert song[9]== 3
-        assert song[10]== 'p0o9i8u7y6t5r4e3w2q112'
-        assert song[11] == '1029384756019283746501'
+        assert song[10]== '1io456789012aer6789012'
+        assert song[11] == '1234567890abcdefghijk1'
 
         assert album[0]=='test album'
-        assert album[1]== 'test artist'
+        assert album[1]== 'wer45poiup1234567nnpp2'
         assert album[2]== 'single'
-        assert album[3]== 16
-        assert album[4]== '1029384756019283746501'
+        assert album[3]== 99
+        assert album[4]== '1234567890abcdefghijk1'
         
-        assert artist[0]=='1234567890123456789012'
+        assert artist[0]=='wer45poiup1234567nnpp2'
         assert artist[1]== 'test artist'
 
     @pytest.mark.parametrize('value', SPOTIFY_OPTIONAL_FIELDS)
@@ -74,19 +73,18 @@ class TestParsers:
         """Tests valid lastfm data against the parse_last_fm() function"""
         song,artist= parse_lastfm_message(valid_lastfm_data)
         assert song[0]=='test song'
-        assert song[1]== '123456789008765432112'
-        assert song[2]== 10000
-        assert song[3]== '1234567890123456789012'
-        assert song[4]== 'https://url.com'
-        assert song[5]== '12345678-1234-1234-1234-123456789012'
-        assert song[6]== .7
+        assert song[1]== '21lop6789fyt385Yt890ab'
+        assert song[2]== 50000
+        assert song[3]== '1Er4567890BOutf6789012'
+        assert song[4]== '12345678-abc3-4d4c-0b90-0987654321ab'
+        assert song[5]== .25
 
         assert artist[0]=='test artist'
-        assert artist[1]== '1234567890123456789012'
+        assert artist[1]== '1Er4567890BOutf6789012'
         assert artist[2]== False
-        assert artist[3]== 80000
-        assert artist[4]== 900000
-        assert artist[5]== .3
+        assert artist[3]== 200000
+        assert artist[4]== 100000
+        assert artist[5]== .5
 
     def test_wrong_fields_lastfm(self):
         '''Makes sure the parser catches wrong field names like on_tours instead of on_tour'''

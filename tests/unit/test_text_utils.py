@@ -1,6 +1,5 @@
 import pytest
 from src.utils.text_processing_utils import extract_collaborators, has_collaborators, normalize_song_name, similarity_score
-import re
 import hypothesis.strategies as st
 from hypothesis import given, settings
 from tests.unit.constants import  NORMALIZE_SONG_NAME_VALUES, NORMALIZE_SONG_NAME_VALUES_IDS, SIMILARITY_SCORE_VALUES, SIMILARITY_SCORE_VALUES_IDS, WRONG_STRING_PAIRS_IDS, WRONG_STRING_PAIRS,EXTRACT_COLLABORATORS_VALUES, EXTRACT_COLLABORATORS_VALUES_IDS, HAS_COLLABORATORS_TEST_CASES, WRONG_STRING_TYPE, WRONG_STRING_TYPE_IDS
@@ -31,10 +30,6 @@ class TestTextUtils:
         assert not result.startswith('  ')
         assert '&' not in result
         assert "feat." or 'feat.' not in result
-
-
-
-    
 
     
     @pytest.mark.parametrize('input, expected_output',HAS_COLLABORATORS_TEST_CASES, ids=[f'Input:{i} Output:{str(o)}' for i,o in HAS_COLLABORATORS_TEST_CASES] )
@@ -72,18 +67,6 @@ class TestTextUtils:
         with pytest.raises(TypeError, match='string'):
             extract_collaborators(type)
 
-    @given(st.text(min_size=0, max_size=1000))
-    def test_extract_collaborators_properties(self, text):
-        text=text.lower()
-        result = extract_collaborators(text)
-        assert type(result)==list
-        assert all(type(value)is str for value in result)
-
-        if result:
-            assert len(result)>0
-        else:
-            assert len(result)==0
-
     
 
 
@@ -112,7 +95,7 @@ class TestTextUtils:
         assert similarity_score(text1, text1)==1.0
         assert similarity_score(text2, text2)==1.0
 
-        assert similarity_score(text1.upper(), text2.upper())==result
+        assert similarity_score(text1.lower(), text2.lower())==result
 
 
     

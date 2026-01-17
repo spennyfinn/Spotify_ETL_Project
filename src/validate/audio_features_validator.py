@@ -3,6 +3,7 @@ import string
 from pydantic import BaseModel, field_validator, model_validator
 import math
 from typing import Any
+from src.utils.transformer_utils import safe_float
 
 class AudioFeaturesData(BaseModel):
     song_id: Any
@@ -76,14 +77,14 @@ class AudioFeaturesData(BaseModel):
 
 
     @model_validator(mode='after')
-    def validate_danceability(cls, model):
-        tempo_normalized= min(model.bpm/200.0, 1.0)
-        expected_danceability = round((tempo_normalized*.3)+ (model.energy * .5)+ (model.zero_crossing_rate*.2), 5)
-        if abs(model.danceability - expected_danceability) > .0001:
+    def validate_danceability(self):
+        tempo_normalized= min(self.bpm/200.0, 1.0)
+        expected_danceability = round(safe_float((tempo_normalized*.3)+(self.energy*.5)+(self.zero_crossing_rate*.2)),5)
+        if abs(self.danceability - expected_danceability) > .0001:
             raise ValueError(
                 f'Danceability calculation mismatch: '
-                f'Expexted Danceability: {expected_danceability}, recieved {model.danceability}')
-        return model
+                f'Expected Danceability: {expected_danceability}, recieved {self.danceability}')
+        return self
     
 
 
