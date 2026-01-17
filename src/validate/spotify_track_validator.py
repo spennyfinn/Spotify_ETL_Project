@@ -142,16 +142,16 @@ class SpotifyTrackData(BaseModel):
             
 
     @model_validator(mode='after')
-    def check_time(cls, model):
-        if model.duration_ms is not None and model.duration_seconds is not None:
-            duration_seconds = model.duration_ms // 1000
-            if duration_seconds != model.duration_seconds:
-                raise ValueError(f'duration_seconds doesn\'t match the calculation from duration_ms: expected {duration_seconds} seconds, but got {model.duration_seconds}')
-        if model.duration_seconds is not None and model.duration_minutes is not None:
-            duration_minutes = round(model.duration_seconds / 60, 2)
-            if duration_minutes != model.duration_minutes:
-                raise ValueError(f'duration_minutes doesn\'t match the calculation from duration_seconds: expected {duration_minutes} minutes, but got {model.duration_minutes}')
-        return model
+    def check_time(self):
+        if self.duration_ms is not None and self.duration_seconds is not None:
+            duration_seconds = self.duration_ms // 1000
+            if duration_seconds != self.duration_seconds:
+                raise ValueError(f'duration_seconds doesn\'t match the calculation from duration_ms: expected {duration_seconds} seconds, but got {self.duration_seconds}')
+        if self.duration_seconds is not None and self.duration_minutes is not None:
+            duration_minutes = round(self.duration_seconds / 60, 2)
+            if duration_minutes != self.duration_minutes:
+                raise ValueError(f'duration_minutes doesn\'t match the calculation from duration_seconds: expected {duration_minutes} minutes, but got {self.duration_minutes}')
+        return self
 
 
 

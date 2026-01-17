@@ -139,7 +139,7 @@ AUDIO_FEATURES_REQUIRED_FIELDS = [
     'harmonic_ratio', 'percussive_ratio'
 ]
 LASTFM_REQUIRED_FIELDS=['song_name', 'artist_id', 'artist_name']
-LAST_FM_OPTIONAL_FIELDS=['num_song_listeners', 'mbid', 'song_url', 'on_tour', 'artist_total_listeners','artist_total_playcount','song_id','engagement_ratio','plays_per_listener']
+LAST_FM_OPTIONAL_FIELDS=['num_song_listeners', 'mbid', 'on_tour', 'artist_total_listeners','artist_total_playcount','song_id','engagement_ratio','plays_per_listener']
 SPOTIFY_REQUIRED_FIELDS=['song_name', 'artist_name', 'duration_ms','popularity', 'song_id', 'artist_id', 'album_id']
 SPOTIFY_OPTIONAL_FIELDS=['album_title', 'album_type', 'release_date', 'release_date_precision', 'is_playable', 'album_total_tracks', 'track_number', 'is_explicit']
 

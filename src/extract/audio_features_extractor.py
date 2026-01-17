@@ -9,6 +9,7 @@ import numpy as np
 from io import BytesIO
 from src.extract.lastfm_extractor import send_through_kafka
 from src.utils.database_utils import get_db, get_songs_and_artists
+from src.utils.http_utils import safe_requests
 from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send
 from concurrent.futures import as_completed, TimeoutError, ProcessPoolExecutor
 import multiprocessing
@@ -24,20 +25,19 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
         my_finder = finder
         search_query = f"{song_name} {artist_name}"
         logger.debug(f'Processing song ID: {song_id}')
-        # Check what methods are available
+
         result = my_finder.search_and_get_links(song_name=search_query, client_id=os.getenv('SPOTIFY_CLIENT_ID'), client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"), limit=1)
-        # Debug: print(result)
 
         if not result['results']:
             logger.warning(f"No preview URL found for {song_name} by {artist_name}")
             return None
         preview_url = result['results'][0]['previewUrl']
-        if result['success']!= True:
+        if result['success']!= True or  not preview_url:
             logger.warning(f"Preview URL not available for {song_name} by {artist_name}")
             return None
 
         try:
-            resp = requests.get(preview_url)
+            resp = safe_requests("GET", preview_url, timeout=5)
         except requests.ConnectionError as e:
             logger.error(f"Connection error when fetching {song_name}: {e}")
         except requests.exceptions.RequestException as e:

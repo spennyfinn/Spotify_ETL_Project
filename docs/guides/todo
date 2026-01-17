@@ -3,7 +3,6 @@
 
 audio features e2e tests
 validation for audio features -- ratios
-fix kafka
 rename tables 
 
 
@@ -33,4 +32,13 @@ move queries to another file
 merge conftests
 log errors in load stage
 batch audio features processing
-  
+fix kafka
+
+
+
+
+audio_feature  validation tests
+lastfm validation tests
+spotify track validation tests
+parsers tests
+text utils tests

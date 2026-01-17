@@ -1,14 +1,12 @@
-import psycopg2
-from src.utils.database import get_db
-import os
+
 from dotenv import load_dotenv
-import csv
+
 
 load_dotenv()
 
 
 
-from src.utils.database import export_table_to_csv_copy
+from src.utils.database_utils import export_table_to_csv_copy
 
 def copy_all_tables():
     artist_query = 'SELECT * from artists ORDER BY artist_name'
