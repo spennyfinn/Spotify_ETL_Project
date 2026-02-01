@@ -1,7 +1,6 @@
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
-from numba.core.types import none
 import requests
 import json
 import logging
