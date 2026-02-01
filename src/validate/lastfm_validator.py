@@ -1,5 +1,4 @@
 from typing import Any
-from llvmlite.ir.values import Value
 from pydantic import  BaseModel, field_validator, model_validator
 import re
 import string
@@ -46,7 +45,7 @@ class LastFmData(BaseModel):
         if type(value) is not float:
             raise TypeError(f'{info.field_name} needs to be a decimal number between 0 and 1, but got {type(value).__name__}')
         if value < 0.0:
-            raise ValueError(f"{info.field_name} must be greater than 0 but got: {Value}")
+            raise ValueError(f"{info.field_name} must be greater than 0 but got: {value}")
         return float(value)
         
     @field_validator('on_tour')

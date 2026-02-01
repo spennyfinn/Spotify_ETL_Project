@@ -7,7 +7,6 @@ import librosa
 import requests
 import numpy as np
 from io import BytesIO
-from src.extract.lastfm_extractor import send_through_kafka
 from src.utils.database_utils import get_db, get_songs_and_artists
 from src.utils.http_utils import safe_requests
 from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send
@@ -130,14 +129,17 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
 
         
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logger.setLevel(logging.INFO)
+
     conn, cur=get_db()
     producer = create_producer('music-streaming-producer')
     song_artists=get_songs_and_artists(cur)
     logger.info(f"Starting audio feature extraction for {len(song_artists)} songs")
     pending_batch = []
-    batch_size = 5
+    batch_size = 50
     cpu_count = multiprocessing.cpu_count()
-    max_workers = min(8, cpu_count)
+    max_workers = min(3, cpu_count)
 
     with ProcessPoolExecutor(max_workers=max_workers) as w:
         futures= { w.submit(get_audio_features, song, artist, song_id): (song, artist, song_id) for song, artist, song_id in song_artists}
