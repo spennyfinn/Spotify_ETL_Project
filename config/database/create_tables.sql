@@ -4,9 +4,9 @@ CREATE TABLE artists (
     on_tour BOOLEAN DEFAULT FALSE, --LFM
     total_listeners BIGINT DEFAULT 0 CHECK(total_listeners >= 0),    --LFM
     total_playcount BIGINT DEFAULT 0 CHECK(total_playcount>=0),   --LFM 
-    plays_per_listener FLOAT,   --LFM
+    plays_per_listener FLOAT   --LFM
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     artist_popularity INT,
     artist_followers INT,
     has_genres BOOLEAN
@@ -17,7 +17,7 @@ CREATE TABLE albums(
     album_title TEXT NOT NULL,  --SP
     artist_id TEXT REFERENCES artists(artist_id), --SP
     album_type TEXT CHECK(album_type IN ('single', 'compilation', 'album')),  --SP
-    album_total_tracks INT CHECK(album_total_tracks>0 AND album_total_tracks<=200), --SP
+    album_total_tracks INT CHECK(album_total_tracks>0 AND album_total_tracks<=200)--SP
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
 );
@@ -38,7 +38,7 @@ CREATE TABLE songs(
     is_explicit BOOLEAN, --SP
     popularity INT CHECK (popularity >=0 AND popularity <= 100), --SP
     track_number INT CHECK (track_number >0 AND track_number<=100), --SP
-    is_playable BOOLEAN, --SP
+    is_playable BOOLEAN--SP
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
