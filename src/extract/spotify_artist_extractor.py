@@ -105,7 +105,7 @@ if __name__=='__main__':
         batch_size=20
         producer = create_producer('music_streaming_producer')
         cpu_count = multiprocessing.cpu_count()
-        max_workers= min(2, cpu_count)
+        max_workers= min(4, cpu_count)
 
         with ProcessPoolExecutor(max_workers=max_workers) as w:
             futures = {w.submit(extract_spotify_artist_metrics, artist_id, artist_name): (artist_id, artist_name) for artist_id, artist_name in artist_ids}
