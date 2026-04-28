@@ -22,7 +22,7 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
     try:
         
         my_finder = finder
-        search_query = f"{song_name} {artist_name}"
+        search_query = f"{song_name} {artist_name}"[:250]
         logger.debug(f'Processing song ID: {song_id}')
 
         result = my_finder.search_and_get_links(song_name=search_query, client_id=os.getenv('SPOTIFY_CLIENT_ID'), client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"), limit=1)
@@ -92,7 +92,7 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
                 total= harmonic_raw + percussive_raw
 
                 if total <=0:
-                    logger.warning("Invalid harmonic/percussive ratio calculation for {song_name}")
+                    logger.warning(f"Invalid harmonic/percussive ratio calculation for {song_name}")
                     return None
 
                 harmonic_ratio = (sum(abs(y_harmonic))/total)
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     pending_batch = []
     batch_size = 50
     cpu_count = multiprocessing.cpu_count()
-    max_workers = min(3, cpu_count)
+    max_workers = min(8, cpu_count)
 
     with ProcessPoolExecutor(max_workers=max_workers) as w:
         futures= { w.submit(get_audio_features, song, artist, song_id): (song, artist, song_id) for song, artist, song_id in song_artists}
