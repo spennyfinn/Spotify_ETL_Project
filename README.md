@@ -110,7 +110,8 @@ This project demonstrates end-to-end data engineering capabilities by building a
 | **Language** | Python 3.9+ |
 | **Streaming** | Confluent Kafka 7.4.0, Zookeeper |
 | **Database** | PostgreSQL (psycopg2-binary) |
-| **Data Processing** | Pandas, NumPy |
+| **Data Processing** | Pandas, NumPy, SciPy, statsmodels |
+| **Visualisation** | Matplotlib, Seaborn |
 | **Audio Analysis** | librosa 0.10.0 |
 | **APIs** | Spotify Web API, Last.fm API |
 | **Validation** | Pydantic 2.5.0 |
@@ -171,7 +172,12 @@ music_streaming_pipeline/
 │   └── docker-compose.yml                  # Kafka, Zookeeper, Kafka UI
 │
 ├── notebooks/
-│   └── music_analysis.ipynb                # EDA & predictive modeling
+│   ├── 01_EDA.ipynb                        # Exploratory data analysis (popularity, BPM, energy, danceability)
+│   ├── 02_correlations.ipynb               # Pearson correlation analysis & scatter plots with regression lines
+│   ├── 03_two_tailed_test.ipynb            # Two-sample hypothesis testing (Mann-Whitney U, Cohen's d)
+│   ├── 04_ANOVA.ipynb                      # One-way ANOVA by album format and decade (Tukey HSD, eta-squared)
+│   ├── STATISTICS_PRACTICE_README.md       # Statistics reference guide (hypothesis testing workflows)
+│   └── music_analysis.ipynb                # Original exploratory analysis notebook
 │
 ├── scripts/
 │   ├── database_export.py                  # Export tables to CSV
@@ -457,11 +463,19 @@ pytest tests/integration/
 
 ## 📈 Data Analysis
 
-The `notebooks/music_analysis.ipynb` notebook contains:
-- Exploratory data analysis on 334K songs
-- Feature engineering (release_year, genre flags)
-- Correlation analysis (popularity drivers)
-- Predictive modeling setup (in progress)
+The project includes a four-notebook statistical analysis series built on top of the pipeline's PostgreSQL exports (~109K songs across 6 joined tables):
+
+| Notebook | Description |
+|----------|-------------|
+| `01_EDA.ipynb` | Exploratory analysis of popularity, BPM, energy, and danceability — histograms, summary stats, correlation heatmap |
+| `02_correlations.ipynb` | Full Pearson correlation analysis across all 18 features, scatter plots with regression lines and R² values for the top predictors of song popularity |
+| `03_two_tailed_test.ipynb` | Two-sample hypothesis tests (Mann-Whitney U) comparing explicit vs clean songs and singles vs album tracks — includes normality checks, Cohen's d effect size, and confidence intervals |
+| `04_ANOVA.ipynb` | One-way ANOVA testing popularity differences across album formats (singles, albums, compilations) and across decades (1960s–2020s) — includes Tukey HSD post-hoc and eta-squared effect sizes |
+
+**Key findings:**
+- Artist popularity is the strongest predictor of song popularity (R² = 0.36, r = 0.60)
+- Explicit vs clean and singles vs albums differences are statistically significant but have negligible effect sizes (d < 0.05)
+- Song popularity declines steadily across more recent decades, likely reflecting survivorship bias in older catalogue and recency weighting in the Spotify algorithm (η² = 0.013, small effect)
 
 ---
 
