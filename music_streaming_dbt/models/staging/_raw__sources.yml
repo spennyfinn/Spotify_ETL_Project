@@ -1,0 +1,70 @@
+version: 2
+
+sources:
+  - name: raw
+    database: MUSICDB
+    schema: RAW
+
+    tables: 
+    - name: raw_spotify_tracks
+      description: "Spotify search API track results (seed extractor)"
+      columns:
+        - name: song_id
+          description: "Spotify track ID"
+          tests:
+            - not_null
+        - name: payload
+          description: "Full track data"
+          tests:
+            - not_null
+        - name: _run_id
+          description: "Identifier for the batched run"
+        - name: _loaded_at
+          description: 'Timestamp when the data was loaded'
+    - name: raw_spotify_artists
+      description: "Spotify artist API results (popularity, followers, genres)"
+      columns:
+        - name: artist_id
+          description: "Spotify artist ID"
+          tests:
+            - not_null
+        - name: payload 
+          description: "Full artist data"
+          tests:
+            - not_null
+        - name: _run_id
+          description: "Identifier for the batched run"
+        - name: _loaded_at
+          description: "Timestamp when the data was loaded"
+    - name: raw_lastfm
+      description: "Last.Fm matched enrichment data"
+      columns:
+        - name: song_id 
+          description: "Spotify track ID (queried from pre-existing data)"
+          tests:
+            - not_null
+        - name: payload
+          description: "Last.Fm enrichment data"
+          tests:
+            - not_null
+        - name: _loaded_at
+          description: "Timestamp when the data was loaded"
+        - name: '_run_id'
+          description: "Id for the batched run"
+    - name: raw_audio_features
+      description: "Librosa-computed audio signal features"
+      columns:
+        - name: song_id
+          description: "Spotify track ID (queried from pre-existing data)"
+          tests:
+            - not_null
+        - name: payload
+          description: 'Audio feature data'
+          tests:
+            - not_null
+        - name: _loaded_at
+          description: "Timestamp when the data was loaded"
+        - name: '_run_id'
+          description: "Id for the batched run"
+
+

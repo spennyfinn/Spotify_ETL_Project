@@ -58,7 +58,7 @@ def extract_spotify_artist_metrics(artist_id, artist_name):
         artists['popularity']= data.get('popularity', 0)
         artists['artist_id']= artist_id
         artists['genres'] = data.get('genres', [])
-        artists['source']= 'artist_genre'
+        artists['source']= 'Spotify'
         
         spotify_name = data.get('name')
         if spotify_name and spotify_name!= artist_name:

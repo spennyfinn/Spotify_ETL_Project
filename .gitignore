@@ -18,6 +18,8 @@ spotify_token.json
 *.token
 *.key
 *.cache
+.secrets/
+*.p8
 
 
 

@@ -1,0 +1,143 @@
+version: 2
+
+models:
+  - name: int_artist__genres
+    description: "Table that flattens the genres list into artist_id - genre pairs"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - artist_id
+              - genre_name
+    columns:
+      - name: artist_id
+        description: "Unique identifier for the artist"
+        tests:
+          - not_null
+      - name: genre_name
+        description: "A music genre"
+        tests:
+          - not_null
+
+  - name: int_albums
+    description: "Groups all of the album data together"
+    columns:
+      - name: album_id
+        description: "Unique identifier for each album"
+        tests:
+          - not_null
+          - unique
+      - name: album_total_tracks
+        description: "The total number of songs on the album"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1000
+      - name: album_title
+        description: "The name of the album"
+        tests:
+          - not_null
+      - name: album_type
+        description: "What classification of album is it"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['single', 'album', 'compilation']
+      - name: artist_id
+        description: "Unique identifier for the artist"
+        tests:
+          - not_null
+
+  - name: int_song__enriched
+    description: "Joins the data from the lastfm staging table and the spotify staging tables"
+    columns:
+      - name: song_id
+        description: "Unique identifier for the row"
+        tests:
+          - not_null
+          - unique
+      - name: song_name
+        description: "Title of the track"
+        tests:
+          - not_null
+      - name: popularity
+        description: "A song's popularity (0-100) derived from Spotify"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: artist_id
+        description: "Identifier for artist"
+        tests:
+          - not_null
+      - name: album_id
+        description: "Identifier for the track's album"
+        tests:
+          - not_null
+      - name: duration_ms
+        description: "Length of the song in milliseconds"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 10800000
+      - name: duration_seconds
+        description: "Length of the song in seconds"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 10800
+      - name: duration_minutes
+        description: "Length of the song in minutes"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 180
+      - name: release_date
+        description: "Date of when the track was released"
+      - name: release_date_precision
+        description: "Level of precision that release date is at"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['day', 'month', 'year']
+      - name: is_playable
+        description: "Signals if the song can be played on Spotify"
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: is_explicit
+        description: "Signals if the song is explicit"
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: num_song_listeners
+        description: "Number of LastFm users that listen to this track"
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: engagement_ratio
+        description: "Share of artist listeners who scrobbled this track (num_song_listeners / artist_total_listeners)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: mbid
+        description: "MusicBrainz identifier for the track from Last.fm"
+      - name: track_number
+        description: "The order the song is on the album"
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false

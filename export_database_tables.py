@@ -6,9 +6,24 @@ load_dotenv()
 
 
 
-from src.utils.database_utils import export_table_to_csv_copy
+from src.utils.database_utils import export_table_to_csv_copy, export_table_to_xlsx
 
-def copy_all_tables():
+def copy_all_tables_xlsx():
+    artist_query = 'SELECT * from artists ORDER BY artist_name'
+    album_query = "SELECT * from albums ORDER BY album_title"
+    song_query = 'SELECT * from songs ORDER BY song_name'
+    audio_features_query = 'SELECT * from song_audio_features ORDER BY song_id'
+
+    export_table_to_xlsx('artists', artist_query, 'exports/xlsx/artist.xlsx')
+    export_table_to_xlsx('albums', album_query, 'exports/xlsx/albums.xlsx')
+    export_table_to_xlsx('songs', song_query, 'exports/xlsx/songs.xlsx')
+    export_table_to_xlsx('song_audio_features', audio_features_query, 'exports/xlsx/song_audio_features.xlsx')
+
+
+
+
+
+def copy_all_tables_csv():
     artist_query = 'SELECT * from artists ORDER BY artist_name'
     album_query = "SELECT * from albums ORDER BY album_title"
     song_query = 'SELECT * from songs ORDER BY song_name'
@@ -21,8 +36,8 @@ def copy_all_tables():
 
 
 if __name__ == '__main__':
-    copy_all_tables()
-    print('Exporting tables is complete')
+    copy_all_tables_xlsx()
+    print('Exporting csv tables is complete')
 
 
 

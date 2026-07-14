@@ -140,6 +140,9 @@ def get_spotify_token():
 def save_token(token, expires_in):
     """
     Save Spotify access token to file with expiration time.
+
+    Uses an atomic write (temp file + os.replace) so concurrent processes
+    can never corrupt the file by writing simultaneously.
     
     Args:
         token (str): Access token to save
@@ -147,13 +150,15 @@ def save_token(token, expires_in):
     """
     if not token or not expires_in:
         raise ValueError("Token and expires_in are required")
-    data={
-         'token': token,
-         'expires_at': time.time() + expires_in -5
+    data = {
+        'token': token,
+        'expires_at': time.time() + expires_in - 5
     }
-
-    with open( "spotify_token.json", 'w') as f:
-         json.dump(data,f)
+    token_path = "spotify_token.json"
+    tmp_path = token_path + ".tmp"
+    with open(tmp_path, 'w') as f:
+        json.dump(data, f)
+    os.replace(tmp_path, token_path)
 
 
 def load_token():
@@ -165,10 +170,17 @@ def load_token():
     """
     try:
         with open('spotify_token.json', 'r') as f:
-            data=json.load(f)
+            data = json.load(f)
         if time.time() < data['expires_at']:
             return data['token']
     except FileNotFoundError:
+        return None
+    except (json.JSONDecodeError, KeyError):
+        logger.warning("spotify_token.json is corrupted or malformed — deleting and re-fetching token")
+        try:
+            os.remove('spotify_token.json')
+        except FileNotFoundError:
+            pass
         return None
     return None
 

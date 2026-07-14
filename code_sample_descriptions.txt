@@ -1,0 +1,16 @@
+CODE SAMPLE DESCRIPTIONS
+=========================
+
+MUSIC STREAMING PIPELINE (full repo)
+--------------------------------------
+A production-grade ETL pipeline that ingests music data from the Spotify and Last.fm APIs, streams it through Apache Kafka, and loads it into a normalized 6-table PostgreSQL schema. The pipeline includes four independent extractors, Pydantic validation schemas, similarity-based cross-API entity matching, and 152 automated tests covering unit and integration scenarios.
+
+
+NOTEBOOKS DIRECTORY
+--------------------------------------
+A four-notebook statistical analysis series built on top of the pipeline's PostgreSQL exports, covering roughly 109,000 songs. The notebooks progress from exploratory data analysis through Pearson correlation, two-sample hypothesis testing (Mann-Whitney U, Cohen's d), and one-way ANOVA with Tukey HSD post-hoc tests, with each notebook building on the findings of the previous one.
+
+
+HOSPITAL DATABASE SQL QUERIES
+--------------------------------------
+Designed and queried a relational PostgreSQL database built from a Kaggle hospital dataset, modeling patient visits, facilities, diagnoses, procedures, and geographic location data across a normalized multi-table schema. Wrote a progression of SQL queries to investigate the dataset, starting with exploratory analysis (patient counts, average length of stay, distinct diagnoses) and moving into facility benchmarking, demographic breakdowns, and clinical pattern analysis. Advanced queries include a window function ranking the most common procedures associated with each diagnosis, a CTE-based comparison of each facility's average charges against the overall system average with percentage difference, and a multi-layer window function approach to rank facilities by readmission risk using repeat visit counts as a proxy metric.

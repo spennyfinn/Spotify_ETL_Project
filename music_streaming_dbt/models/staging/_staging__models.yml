@@ -1,0 +1,327 @@
+version: 2
+
+models:
+  - name: stg_spotify__tracks
+    description:  "Cleaned Spotify track data from raw"
+    columns:
+      - name: song_id 
+        description: "Unique id for each track"
+        tests:
+          - not_null
+          - unique
+      - name: song_name
+        description: "The title of the song"
+        tests:
+          - not_null
+      - name: artist_id 
+        description: "Unique identifier for the artist"
+        tests:
+          - not_null
+      - name: artist_name
+        description: "The name of the artist who made the track"
+        tests:
+          - not_null
+      - name: album_id
+        description: "Unique identifier for the album the song is on"
+        tests:
+          - not_null
+      - name: album_title
+        description: "Name of the album the song is on"
+        tests:
+          - not_null
+      - name: popularity
+        description: "A value (0-100) that signals a song's success/popularity"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: album_type
+        description: "Is the album an album, single, or compilation"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['single', 'compilation', 'album']
+      - name: album_total_tracks
+        description: "The number of tracks on an album"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1000
+      - name: release_date
+        description: 'Date when the track was created'
+      - name: release_date_precision
+        description: "Signals the highest level of how precise the release_date field is"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['day', 'month', 'year']
+      - name: duration_ms
+        description: "Length of the song in milliseconds"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 10800000
+      - name: duration_seconds
+        description: "Length of the song in seconds (derived from duration_ms)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 10800
+      - name: duration_minutes
+        description: "Length of the song in minutes (derived from duration_ms)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 180
+      - name: is_explicit
+        description: "A boolean flag that signals if a song has explicit language or content"
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: track_number
+        description: 'The track number on the album'
+      - name: is_playable
+        description: "A boolean flag if the track is playable on Spotify"
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: source
+        description: "What data source the data is from"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Spotify']
+      - name: _run_id
+        description: "Identifier for the run"
+      - name: _loaded_at
+        description: "Timestamp of when the data was loaded"
+  
+  - name: stg_spotify__artists
+    description: "Cleaned data from Spotify Artist API (derived from raw)"
+    columns:
+      - name: artist_id
+        description: "Unique identifier for the artist row"
+        tests:
+          - not_null
+          - unique
+      - name: artist_name 
+        description: "Name of the artist"
+        tests:
+          - not_null
+      - name: artist_followers
+        description: "The number of followers an artist has on Spotify"
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: artist_popularity
+        description: "A derived metric from Spotify on how popular an artist is (0-100)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: genres
+        description: "A list of the artist's genres"
+      - name: has_genres
+        description: "A boolean flag to assert if an artist has genres associated with them"
+        tests:
+          - accepted_values:
+              arguments: 
+                values: [true, false]
+      - name: source
+        description: "Identifies what data source the data comes from"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Spotify"]
+      - name: _run_id
+        description: "Identifier for the run"
+      - name: _loaded_at
+        description: "Timestamp of when the data was loaded"
+  
+  - name: stg_audio__features
+    description: "Cleaned data from librosa library"
+    columns:
+      - name: song_id
+        description: 'Unique identifier for the track'
+        tests:
+          - not_null
+          - unique
+      - name: bpm
+        description: "The beats per minute in a track"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 30
+                max_value: 300
+      - name: energy
+        description: "Quantified metric for a song's energy"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: spectral_centroid
+        description: "A measure of a song's brightness"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 10000
+      - name: source
+        description: "Where the data was derived"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Librosa']
+      - name: zero_crossing_rate
+        description: "Measure of how noisy a song is"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: percussive_ratio
+        description: "Measure of how percussive a song is compared to how harmonic"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: harmonic_ratio
+        description: "Measure of how harmonic a song is compared to how percussive"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: danceability
+        description: "A calculated metric that evaluates how danceable the song is (0-1)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: preview_url
+        description: "A url for the sound clip of the track"
+        tests:
+          - not_null
+      - name: _run_id
+        description: "Identifier for the run"
+      - name: _loaded_at
+        description: "Timestamp of when the data was loaded"
+
+  - name: stg_lastfm
+    description: "Cleaned data from Last.FM"
+    columns:
+      - name: song_id
+        description: 'Unique identifier for the track'
+        tests:
+          - not_null
+          - unique
+      - name: song_name
+        description: "The name of the track"
+        tests:
+          - not_null
+      - name: artist_name
+        description: "The name of the artist who sings the track"
+        tests:
+          - not_null
+      - name: artist_id
+        description: "Identifier for the artist"
+        tests:
+          - not_null
+      - name: source
+        description: "Where the data was derived"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Lastfm']
+      - name: num_song_listeners
+        description: "Number of LastFM users that listened to the track"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: mbid
+        description: "Another identifier for the track"
+      - name: on_tour
+        description: "A boolean flag that signals if the artist is on tour at the moment"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: artist_total_listeners
+        description: "The total number of LastFm listeners that have listened to the artist"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: artist_total_playcount
+        description: "The total number of streams LastFm listeners have streamed the artist"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: engagement_ratio
+        description: "The amount of artist listeners that listened to a specific track (num_song_listeners/artist_total_listeners)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: plays_per_listener
+        description: "How many times a listener on LastFm listens to songs by an artist (artist_total_playcount/artist_total_listeners)"
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: _run_id
+        description: "Identifier for the run"
+      - name: _loaded_at
+        description: "Timestamp of when the data was loaded"
+      
+      
+
+          
+
+              
+
+
+
+
+          
+
+              
+
+
