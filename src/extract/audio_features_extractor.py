@@ -115,7 +115,7 @@ def get_audio_features(song_name, artist_name, song_id)-> Dict:
                     'preview_url' : preview_url,
                     'harmonic_ratio': float(harmonic_ratio),
                     'percussive_ratio': float(percussive_ratio),
-                    'source': 'preview_url'
+                    'source': 'Librosa'
                 }
             del y,y_harmonic, y_percussive, beats, bpm, rms, zcr, spectral_centroid, sr
             gc.collect()

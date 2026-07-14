@@ -98,4 +98,24 @@ def export_table_to_csv_copy(table, query, filename):
         conn.close()
         cur.close()
 
+
+def export_table_to_xlsx(table, query, filename):
+    import pandas as pd
+    conn, cur = get_db()
+
+    try:
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        cur.execute(query)
+        rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        df.to_excel(filename, index=False, engine='openpyxl')
+        logger.info(f"Exported {len(df)} rows from {table} to {filename}")
+
+    except Exception as e:
+        logger.error(f"Error exporting table {table} to xlsx: {e}")
+    finally:
+        conn.close()
+        cur.close()
+
 #

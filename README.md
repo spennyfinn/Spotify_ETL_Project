@@ -479,6 +479,237 @@ The project includes a four-notebook statistical analysis series built on top of
 
 ---
 
+## 🧠 Data Analysis Interview Reference
+
+A quick-reference summary of every statistical concept, function, and workflow used in the analysis notebooks — written for interview preparation.
+
+---
+
+### Core Concepts
+
+| Term | What It Means |
+|------|--------------|
+| **p-value** | Probability that your result happened by chance. If p < 0.05, the result is statistically significant and you reject H0 |
+| **Alpha (α)** | Your significance threshold — standard is 0.05 (5%) |
+| **H0 (Null Hypothesis)** | Assumes no difference or no effect between groups |
+| **H1 (Alternative Hypothesis)** | What you believe is actually true — there IS a difference |
+| **Reject H0** | p < α — the result is statistically significant |
+| **Fail to reject H0** | p > α — not enough evidence to conclude a difference exists |
+| **Effect size** | How big the difference actually is, independent of sample size. A result can be significant but practically meaningless |
+| **Statistical power** | Probability of detecting a real effect when one exists — increases with sample size |
+| **Type I Error** | False positive — you rejected H0 but it was actually true |
+| **Type II Error** | False negative — you failed to reject H0 but it was actually false |
+| **Normal distribution** | Bell-shaped curve — many tests assume your data looks like this |
+| **Central Limit Theorem** | With large samples (n > 30), the distribution of sample means approaches normal regardless of the raw data shape |
+
+---
+
+### Descriptive Statistics — `df.describe()`
+
+Returns count, mean, std, min, 25%, 50% (median), 75%, max for every numeric column. Always run this first before any test to understand your data.
+
+```python
+df.describe()
+df['column'].mean()
+df['column'].median()
+df['column'].std()
+df['column'].value_counts()
+```
+
+---
+
+### Correlation Analysis — `pearsonr`, `df.corr()`
+
+**What it does:** Measures the strength and direction of the linear relationship between two continuous variables. Ranges from -1 (perfect negative) to +1 (perfect positive). 0 means no relationship.
+
+**When to use it:** Both variables are continuous and you want to understand if they move together.
+
+**Key functions:**
+```python
+# Correlation matrix across all numeric columns
+df.corr()
+
+# Pearson r and p-value for a single pair
+from scipy.stats import pearsonr
+r, p = pearsonr(x, y)
+r_squared = r**2   # R² = proportion of variance explained
+
+# Regression line on a scatter plot
+m, b = np.polyfit(x, y, 1)
+```
+
+**Interpreting R²:** R² = 0.36 means the x variable explains 36% of the variance in y. The other 64% is driven by factors not in the model.
+
+---
+
+### Normality Check — `shapiro`
+
+**What it does:** Tests whether your data is normally distributed. Required before deciding between a t-test and its non-parametric alternative.
+
+**When to use it:** Before running a t-test or ANOVA. Sample 500 rows on large datasets — Shapiro becomes hypersensitive above ~5000 rows and will always return p < 0.05 even for trivially non-normal distributions.
+
+```python
+from scipy.stats import shapiro
+_, p = shapiro(group.sample(500, random_state=42))
+# p > 0.05 → normal → use t-test
+# p < 0.05 → not normal → use Mann-Whitney U
+```
+
+---
+
+### Two-Sample T-Test — `ttest_ind`
+
+**What it does:** Tests whether two groups have significantly different means.
+
+**When to use it:** Two groups, continuous outcome, data is approximately normal (or n > 30).
+
+**Steps:**
+1. State H0 and H1
+2. Split data into two groups
+3. Check normality (Shapiro-Wilk)
+4. Run t-test
+5. Compute Cohen's d (effect size)
+6. Compute confidence intervals
+7. Write conclusion
+
+```python
+from scipy.stats import ttest_ind
+t_stat, p_val = ttest_ind(group1, group2)
+# Uses Welch's t-test by default (does not assume equal variances)
+```
+
+**Note:** `ttest_ind` handles unequal group sizes fine. Welch's correction is applied automatically.
+
+---
+
+### Mann-Whitney U Test — `mannwhitneyu`
+
+**What it does:** Non-parametric alternative to the t-test. Compares the distributions of two groups without assuming normality. Tests whether one group tends to have higher values than the other.
+
+**When to use it:** Data fails normality, is heavily skewed, or has significant outliers.
+
+```python
+from scipy.stats import mannwhitneyu
+stat, p_val = mannwhitneyu(group1, group2, alternative='two-sided')
+```
+
+**vs t-test:** Mann-Whitney compares distributions/rankings; t-test compares means. On large samples they almost always agree on the conclusion.
+
+---
+
+### Cohen's d (Effect Size for T-Tests)
+
+**What it does:** Measures how many standard deviations apart the two group means are. Tells you if a statistically significant difference is actually meaningful in practice.
+
+```python
+pooled_std = np.sqrt((group1.std()**2 + group2.std()**2) / 2)
+cohens_d   = (group1.mean() - group2.mean()) / pooled_std
+```
+
+| Value | Interpretation |
+|-------|---------------|
+| d < 0.2 | Negligible |
+| 0.2 ≤ d < 0.5 | Small |
+| 0.5 ≤ d < 0.8 | Medium |
+| d ≥ 0.8 | Large |
+
+**Why it matters:** With 50k+ rows, almost any difference will have p < 0.05. Cohen's d tells you if that difference is big enough to act on.
+
+---
+
+### Confidence Intervals — `DescrStatsW`
+
+**What it does:** Gives a range of values that likely contains the true population mean. A 95% CI means if you ran the study 100 times, 95 of those intervals would contain the true mean.
+
+```python
+import statsmodels.stats.api as sms
+ci = sms.DescrStatsW(group).tconfint_mean()
+# Returns (lower_bound, upper_bound)
+```
+
+**Interpretation:** If two group CIs do not overlap, the groups are likely significantly different. If they overlap significantly, the difference may not be meaningful.
+
+---
+
+### Levene's Test (Equal Variance Check for ANOVA)
+
+**What it does:** Tests whether two or more groups have equal variances — a key assumption of ANOVA.
+
+```python
+from scipy.stats import levene
+stat, p = levene(group1, group2, group3)
+# p > 0.05 → variances are equal → use standard ANOVA
+# p < 0.05 → variances differ → consider Welch's ANOVA
+```
+
+**Note:** Like Shapiro-Wilk, Levene's becomes hypersensitive on large samples. Use boxplots to visually assess variance equality alongside the test result.
+
+---
+
+### One-Way ANOVA — `f_oneway`
+
+**What it does:** Tests whether at least one of three or more groups has a significantly different mean. More appropriate than running multiple t-tests (which inflates false positive rate).
+
+**When to use it:** Three or more groups, continuous outcome, roughly equal variances.
+
+**Steps:**
+1. State H0 and H1
+2. Split data into groups
+3. Check equal variance (Levene's + boxplot)
+4. Run ANOVA
+5. Run Tukey HSD post-hoc if significant
+6. Compute eta-squared (effect size)
+7. Write conclusion
+
+```python
+from scipy.stats import f_oneway
+f_stat, p_val = f_oneway(group1, group2, group3)
+```
+
+**F-statistic:** Ratio of between-group variance to within-group variance. F = 19 means the groups differ 19x more than individual items vary within each group.
+
+---
+
+### Tukey HSD Post-Hoc Test — `pairwise_tukeyhsd`
+
+**What it does:** After a significant ANOVA, tells you exactly WHICH pairs of groups are significantly different from each other.
+
+```python
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+tukey = pairwise_tukeyhsd(endog=df['outcome'], groups=df['group'], alpha=0.05)
+print(tukey)
+# reject=True → that pair is significantly different
+# meandiff → the difference in means between the pair
+```
+
+---
+
+### Eta-Squared η² (Effect Size for ANOVA)
+
+**What it does:** Proportion of total variance in the outcome explained by the grouping variable.
+
+```python
+grand_mean = df['outcome'].mean()
+ss_between = sum(len(g) * (g.mean() - grand_mean)**2 for g in groups)
+ss_total   = sum((df['outcome'] - grand_mean)**2)
+eta_sq     = ss_between / ss_total
+```
+
+| Value | Interpretation |
+|-------|---------------|
+| η² < 0.01 | Negligible |
+| 0.01 ≤ η² < 0.06 | Small |
+| 0.06 ≤ η² < 0.14 | Medium |
+| η² ≥ 0.14 | Large |
+
+---
+
+### The Large Sample Problem — Know This Cold
+
+With 50,000+ rows, statistical tests become hypersensitive. Both Shapiro-Wilk and Levene's will return p = 0.00 for differences so small they are invisible on a plot and irrelevant in practice. **Always report effect size alongside p-values.** A result can be statistically significant and practically meaningless at the same time — this is the most common mistake analysts make when interpreting results on large datasets.
+
+---
+
 ## 📝 Key Learnings
 
 1. **Modular extractor design**: Separating data sources into 4 independent extractors enabled parallel execution and simplified debugging when one API had issues.

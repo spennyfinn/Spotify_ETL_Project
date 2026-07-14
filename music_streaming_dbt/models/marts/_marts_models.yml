@@ -1,0 +1,113 @@
+version: 2
+
+models:
+  - name: dim_songs
+    description: "Song descriptors for the star schema"
+    columns:
+      - name: song_id
+        tests:
+          - not_null
+          - unique
+      - name: song_name
+        tests:
+          - not_null
+
+  - name: dim_artists
+    description: "Artist dimension"
+    columns:
+      - name: artist_id
+        tests:
+          - not_null
+          - unique
+      - name: artist_name
+        tests:
+          - not_null
+
+  - name: dim_albums
+    description: "Album dimension"
+    columns:
+      - name: album_id
+        tests:
+          - not_null
+          - unique
+      - name: artist_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_artists')
+                field: artist_id
+
+  - name: dim_genres
+    description: "Genre dimension"
+    columns:
+      - name: genre_id
+        tests:
+          - not_null
+          - unique
+      - name: genre_name
+        tests:
+          - not_null
+          - unique
+
+  - name: fct_songs
+    description: "Central fact table"
+    columns:
+      - name: song_id
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('dim_songs')
+                field: song_id
+      - name: artist_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_artists')
+                field: artist_id
+      - name: album_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_albums')
+                field: album_id
+
+  - name: fct_audio_features
+    description: "Song-grain Librosa audio features"
+    columns:
+      - name: song_id
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('dim_songs')
+                field: song_id
+
+  - name: bridge_artist_genres
+    description: "Many-to-many bridge table connecting dim_artists and dim_genres"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - artist_id
+              - genre_id
+    columns:
+      - name: artist_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_artists')
+                field: artist_id
+      - name: genre_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_genres')
+                field: genre_id
