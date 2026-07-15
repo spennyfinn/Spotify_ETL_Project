@@ -11,10 +11,11 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-from snowflake.connector import connect
+
+from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import Error as SnowflakeError
 from snowflake.connector.pandas_tools import write_pandas
-
+from src.utils.snowflake_utils import get_snowflake_connection
 from config.logging import error_logger
 
 logger = logging.getLogger(__name__)
@@ -55,47 +56,30 @@ REQUIRED_TABLE_FIELDS = {
 }
 
 
-def get_snowflake_connection():
-    account = os.environ["SNOWFLAKE_ACCOUNT"]
-    user = os.environ["SNOWFLAKE_USER"]
-    key_path = os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]
-    key_passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-
-    connect_kwargs = {
-        "account": account,
-        "user": user,
-        "authenticator": "SNOWFLAKE_JWT",
-        "private_key_file": key_path,
-        "role": os.getenv("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
-        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        "database": os.getenv("SNOWFLAKE_DATABASE", "MUSICDB"),
-        "schema": os.getenv("SNOWFLAKE_SCHEMA", "RAW"),
-    }
-    if key_passphrase:
-        connect_kwargs["private_key_file_pwd"] = key_passphrase
-    if host := os.getenv("SNOWFLAKE_HOST"):
-        connect_kwargs["host"] = host
-
-    return connect(**connect_kwargs)
         
     
 
 def load_raw_records(
     table: str,
     records: list[dict],
-    id_columns:str,
-    run_id:str,
-    ) -> [int, int]:
-    
+    id_columns: str,
+    run_id: str,
+    conn: SnowflakeConnection | None = None,
+) -> tuple[int, int]:
+    """Append validated records to a RAW table via ``write_pandas``.
+
+    Pass ``conn`` to reuse an open connection (caller owns lifecycle). When
+    ``conn`` is omitted, a short-lived connection is opened and closed here.
+    """
     if not table:
         raise ValueError("No table defined, unable to upload data to Snowflake")
-    
+
     if not records:
-        return (0,0)
+        return (0, 0)
 
     if not id_columns:
-        raise ValueError('There is no defined id_column')
-    
+        raise ValueError("There is no defined id_column")
+
     table = str(table.lower().strip())
     id_columns = str(id_columns.lower().strip())
     table_id_pairs = list(TABLE_ID_PAIRS.items())
@@ -103,7 +87,7 @@ def load_raw_records(
 
     if table_id not in table_id_pairs:
         raise ValueError("The table and id_column is not in the valid pairs")
-    
+
     error_count = 0
     successful_records = []
     for record in records:
@@ -112,18 +96,16 @@ def load_raw_records(
             error_count += 1
             continue
 
-
         missing_fields = False
         for field in REQUIRED_TABLE_FIELDS[table]:
             value = record.get(field)
-            if value is None or str(value).strip()=="":
+            if value is None or str(value).strip() == "":
                 missing_fields = True
                 break
 
         if missing_fields:
-            error_count+=1
+            error_count += 1
             continue
-
 
         data = {
             id_columns: str(record_id).strip(),
@@ -136,10 +118,11 @@ def load_raw_records(
     if not successful_records:
         return (0, error_count)
 
-    conn = None
-    try:
+    own_conn = conn is None
+    if own_conn:
         conn = get_snowflake_connection()
 
+    try:
         rows_for_insertion = []
         for row in successful_records:
             rows_for_insertion.append({
@@ -177,7 +160,7 @@ def load_raw_records(
         logger.error("Unexpected error loading into %s: %s", table, e)
         raise
     finally:
-        if conn is not None:
+        if own_conn and conn is not None:
             conn.close()
 
 
