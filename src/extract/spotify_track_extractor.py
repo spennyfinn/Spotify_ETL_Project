@@ -7,7 +7,7 @@ import logging
 from dotenv import load_dotenv
 from src.utils.http_utils import safe_requests
 from src.utils.spotify_api_utils import extract_spotify_data, get_spotify_token
-from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send
+
 from src.utils.text_processing_utils import get_words_list
 
 logger = logging.getLogger(__name__)

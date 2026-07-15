@@ -118,4 +118,3 @@ def export_table_to_xlsx(table, query, filename):
         conn.close()
         cur.close()
 
-#

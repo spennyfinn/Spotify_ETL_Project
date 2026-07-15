@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import logging
 
 from src.utils.database_utils import get_db
-from src.utils.kafka_utils import consume_message, create_consumer
+
 from src.load.parsers import parse_artist_data, parse_audio_features_data, parse_lastfm_message, parse_spotify_message
 from src.utils.spotify_api_utils import  insert_artist_data_query, insert_genres_query, spotify_album_query, spotify_artist_query, spotify_song_query, lastfm_artist_query, lastfm_song_query, insert_audio_features_query
 

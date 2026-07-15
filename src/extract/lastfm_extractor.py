@@ -1,188 +1,365 @@
+"""Last.fm backfill extractor for the Snowflake ELT pipeline.
 
-import requests
-import os
+Finds Spotify tracks in STAGING that do not yet have Last.fm enrichment, calls
+the Last.fm API to resolve listener counts and artist stats, and appends
+results to ``RAW.raw_lastfm`` for dbt to promote into ``stg_lastfm``.
+
+Pipeline position::
+
+    stg_spotify__tracks  -->  Last.fm API  -->  raw_lastfm  -->  dbt (stg_lastfm+)
+
+Prerequisites:
+    - Run ``dbt run --select stg_spotify__tracks`` after loading Spotify seed data
+      so STAGING reflects current RAW rows.
+    - Set ``LAST_FM_KEY`` in ``.env``.
+
+Usage::
+
+    python -m src.extract.lastfm_extractor
+
+After loading, run ``dbt build --select stg_lastfm+`` to refresh staging and marts.
+
+Matching strategy:
+    1. ``track.getInfo`` using Spotify song + artist names (primary).
+    2. ``track.search`` with separate track/artist params (fallback).
+    3. ``artist.getInfo`` to attach mbid, tour status, and artist-level stats.
+
+Rows that fail similarity checks or return no API match are skipped (not loaded).
+"""
+
 import json
 import logging
-from src.utils.kafka_utils import create_producer, flush_kafka_producer, safe_batch_send, send_through_kafka
-from src.utils.text_processing_utils import normalize_song_name, similarity_score
-from src.utils.database_utils import get_db
-from dotenv import load_dotenv
+import os
 import random
 import time
-import multiprocessing
-from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
+import uuid
+
+import requests
+from dotenv import load_dotenv
+
+from src.load.snowflake_loader import load_raw_records
+from src.utils.snowflake_utils import fetch_all, snowflake_connection
+from src.utils.text_processing_utils import normalize_song_name, similarity_score
+
+LASTFM_API_URL = "http://ws.audioscrobbler.com/2.0/"
 
 logger = logging.getLogger(__name__)
 
-def get_track_from_lastfm(song_name, artist_name, song_id,artist_id, key):
 
-    song_name_normalized= normalize_song_name(song_name)
-    artist_name_normalized=normalize_song_name(artist_name)
-   
-
-    #define url parameters
-    query = f"{song_name_normalized} {artist_name_normalized}"
-    
-    
-    #call API with exception handling
+def _lastfm_get(params: dict, key: str) -> dict | None:
+    """Call the Last.fm API and return JSON, or None on error / not found."""
     try:
-        resp=requests.get(url=f'http://ws.audioscrobbler.com/2.0/?method=track.search&track={query}&api_key={key}&format=json&limit=5')
-        logger.debug(f"Last.fm API request URL: {resp.url}")
-        data=resp.json()
+        resp = requests.get(
+            LASTFM_API_URL,
+            params={**params, "api_key": key, "format": "json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
     except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error for {song_name} by {artist_name}: {e}")
+        logger.error("JSON decode error from Last.fm: %s", e)
         return None
     except requests.exceptions.Timeout as e:
-        logger.error(f"Timeout error for {song_name} by {artist_name}: {e}")
+        logger.error("Last.fm timeout: %s", e)
         return None
     except requests.exceptions.RequestException as e:
-        logger.error(f"API error for {song_name} by {artist_name}: {e}")
+        logger.error("Last.fm request error: %s", e)
         return None
-    except ConnectionError as e:
-        logger.error(f"Connection error for {song_name} by {artist_name}: {e}")
-        return None
-    
-    results = data.get('results', {})
-    trackmatches= results.get('trackmatches', {})
-    tracks= trackmatches.get('track', [])
 
+    if data.get("error"):
+        logger.debug("Last.fm API: %s", data.get("message"))
+        return None
+    return data
+
+
+def _build_track_match(
+    song_name: str,
+    artist_name: str,
+    song_id: str,
+    artist_id: str,
+    track_name: str,
+    matched_artist_name: str,
+    listeners: int,
+) -> dict:
+    """Build a normalized match dict ready for ``load_raw_records``."""
+    return {
+        "song_name": normalize_song_name(track_name).lower(),
+        "artist_name": normalize_song_name(matched_artist_name).lower(),
+        "listeners": listeners,
+        "original_song_name": song_name,
+        "original_artist_name": artist_name,
+        "artist_id": artist_id,
+        "song_id": song_id,
+    }
+
+
+def _is_valid_match(
+    song_name_normalized: str,
+    artist_name_normalized: str,
+    track_name: str,
+    matched_artist_name: str,
+    listeners: int,
+) -> bool:
+    """Return True when a Last.fm candidate passes name and listener thresholds."""
+    if not track_name or not matched_artist_name or listeners < 10:
+        return False
+    if normalize_song_name(matched_artist_name).lower() in ("unknown", "<unknown>", ""):
+        return False
+
+    song_score = similarity_score(song_name_normalized, normalize_song_name(track_name))
+    artist_score = similarity_score(artist_name_normalized, normalize_song_name(matched_artist_name))
+    if song_score < 0.8 or artist_score < 0.7:
+        logger.debug(
+            "Match rejected: %s by %s (song=%.2f, artist=%.2f)",
+            track_name,
+            matched_artist_name,
+            song_score,
+            artist_score,
+        )
+        return False
+    return True
+
+
+def _get_track_from_get_info(
+    song_name: str,
+    artist_name: str,
+    song_id: str,
+    artist_id: str,
+    key: str,
+    song_name_normalized: str,
+    artist_name_normalized: str,
+) -> dict | None:
+    """Direct lookup when Spotify already provides artist + track names."""
+    data = _lastfm_get(
+        {"method": "track.getInfo", "track": song_name, "artist": artist_name},
+        key,
+    )
+    if not data or "track" not in data:
+        return None
+
+    track = data["track"]
+    listeners = int(track.get("listeners") or 0)
+    track_name = track.get("name") or song_name
+
+    artist_block = track.get("artist", {})
+    if isinstance(artist_block, dict):
+        matched_artist_name = artist_block.get("name") or artist_name
+    else:
+        matched_artist_name = artist_name
+
+    if not _is_valid_match(
+        song_name_normalized,
+        artist_name_normalized,
+        track_name,
+        matched_artist_name,
+        listeners,
+    ):
+        return None
+
+    logger.info(
+        "track.getInfo match: %s by %s (%s listeners)",
+        track_name,
+        matched_artist_name,
+        listeners,
+    )
+    return _build_track_match(
+        song_name, artist_name, song_id, artist_id, track_name, matched_artist_name, listeners
+    )
+
+
+def _get_track_from_search(
+    song_name: str,
+    artist_name: str,
+    song_id: str,
+    artist_id: str,
+    key: str,
+    song_name_normalized: str,
+    artist_name_normalized: str,
+) -> dict | None:
+    """Fallback fuzzy search with separate track and artist params."""
+    data = _lastfm_get(
+        {
+            "method": "track.search",
+            "track": song_name_normalized,
+            "artist": artist_name_normalized,
+            "limit": 10,
+        },
+        key,
+    )
+    if not data:
+        return None
+
+    tracks = data.get("results", {}).get("trackmatches", {}).get("track", [])
+    if isinstance(tracks, dict):
+        tracks = [tracks]
     if not tracks:
-        logger.warning(f'No tracks found for {song_name} by {artist_name}')
+        logger.warning("No tracks found for %s by %s", song_name, artist_name)
         return None
 
+    best_match = None
+    best_score = 0.0
 
-
-    best_match=None
-    best_score=0
-    #iterate through potential matched tracks
     for track in tracks:
-        #get metrics and normalize
-        song_title=normalize_song_name(track.get("name", None)).lower()
-        artist_title=normalize_song_name(track.get('artist', None)).lower()
-        listeners=int(track.get('listeners', 0))
+        track_name = track.get("name") or ""
+        matched_artist_name = track.get("artist") or ""
+        listeners = int(track.get("listeners") or 0)
 
-
-        if not song_title or not artist_title or listeners == 0:
-            logger.warning(f"Invalid track data for {song_title} by {artist_title}")
+        if not _is_valid_match(
+            song_name_normalized,
+            artist_name_normalized,
+            track_name,
+            matched_artist_name,
+            listeners,
+        ):
             continue
 
-        song_score=similarity_score(song_name_normalized, song_title)
-        artist_score= similarity_score(artist_name_normalized, artist_title)
+        song_score = similarity_score(song_name_normalized, normalize_song_name(track_name))
+        artist_score = similarity_score(
+            artist_name_normalized, normalize_song_name(matched_artist_name)
+        )
+        total_score = (song_score * 0.5) + (artist_score * 0.5)
 
-        #Ensuring that the song and artist match closely (doesn't have to be perfect)
-        if song_score <.8:
-            logger.debug(f"Song score too low: {song_title} by {artist_title} ({song_score:.2f})")
-            continue
-        if artist_score <.7:
-            logger.debug(f"Artist score too low: {song_title} by {artist_title} ({artist_score:.2f})")
-            continue
-        
-       
-        original_artist = artist_name.lower().strip()
-
-        #rerun similarity test on artist to perform error handing again
-        if similarity_score(original_artist, artist_name)< 0.7:
-            logger.warning(f"Artist mismatch: Last.fm '{artist_name}' vs Spotify '{original_artist}'")
-
-        if artist_title in ['unknown', "<unknown>", '']:
-            logger.warning(f"Invalid artist name from Last.fm: {artist_title}")
-            continue
-        if int(listeners) < 10:
-            logger.debug(f"Too few listeners: {listeners} for {song_title} by {artist_title}")
-            continue
-
-        logger.debug(f"Scores - Song: {song_score:.2f}, Artist: {artist_score:.2f} for {song_title} by {artist_title}")
-
-        #get total score by normalizing the values
-        total_score=(song_score*.5) + (artist_score*.5)
-
-        #determine the best match 
         if total_score > best_score:
             best_score = total_score
-            best_match = {
-                'song_name': song_title,
-                'artist_name' : artist_title,
-                'listeners': listeners,
-                'original_song_name': song_name,
-                'original_artist_name': artist_name,
-                'artist_id': artist_id,
-                'song_id':song_id
-            }
-        elif total_score == best_score:
-            if int(listeners) > int(best_match['listeners']):
-                best_match = {
-                'song_name': song_title,
-                'artist_name' : artist_title,
-                'listeners': listeners,
-                'original_song_name': song_name,
-                'original_artist_name': artist_name,
-                'artist_id': artist_id,
-                'song_id':song_id
-            }
-        time.sleep(random.uniform(.5, 1))
-            
-    # ensure the match is relatively similar
-    if best_match and best_score > .8:
-        logger.info(f'Best match found: {best_match["song_name"]} by {best_match["artist_name"]} (score: {best_score:.2f})')
+            best_match = _build_track_match(
+                song_name,
+                artist_name,
+                song_id,
+                artist_id,
+                track_name,
+                matched_artist_name,
+                listeners,
+            )
+        elif total_score == best_score and best_match and listeners > best_match["listeners"]:
+            best_match = _build_track_match(
+                song_name,
+                artist_name,
+                song_id,
+                artist_id,
+                track_name,
+                matched_artist_name,
+                listeners,
+            )
+
+        time.sleep(random.uniform(0.5, 1))
+
+    if best_match and best_score >= 0.75:
+        logger.info(
+            "track.search match: %s by %s (score: %.2f)",
+            best_match["song_name"],
+            best_match["artist_name"],
+            best_score,
+        )
         return best_match
-    else:
-        logger.warning(f"No strong matches found for {song_name} by {artist_name}")
-        return None
+
+    logger.warning("No strong matches found for %s by %s", song_name, artist_name)
+    return None
+
+
+def get_track_from_lastfm(
+    song_name: str, artist_name: str, song_id: str, artist_id: str, key: str
+) -> dict | None:
+    """Resolve a Spotify song to Last.fm track listener counts.
+
+    Tries ``track.getInfo`` first, then falls back to ``track.search`` if the
+    direct lookup fails or does not pass similarity checks.
+
+    Args:
+        song_name: Track title from Spotify staging.
+        artist_name: Primary artist name from Spotify staging.
+        song_id: Spotify track ID.
+        artist_id: Spotify artist ID.
+        key: Last.fm API key.
+
+    Returns:
+        Match dict with listener count and original Spotify identifiers, or None.
+    """
+    song_name_normalized = normalize_song_name(song_name)
+    artist_name_normalized = normalize_song_name(artist_name)
+
+    match = _get_track_from_get_info(
+        song_name,
+        artist_name,
+        song_id,
+        artist_id,
+        key,
+        song_name_normalized,
+        artist_name_normalized,
+    )
+    if match:
+        return match
+
+    return _get_track_from_search(
+        song_name,
+        artist_name,
+        song_id,
+        artist_id,
+        key,
+        song_name_normalized,
+        artist_name_normalized,
+    )
 
 
 
 
-def match_artists_from_lastfm(track_data, key):
-    #get artist_name to verify data is present
-    original_artist_name = track_data.get('artist_name', None)
-    if not original_artist_name:
-        return None
-    #call API and error handle
-    try:
-        resp=requests.get(f'http://ws.audioscrobbler.com/2.0/?method=artist.getInfo&api_key={key}&artist={original_artist_name}&format=json&limit=5')
-        resp.raise_for_status()
-        data=resp.json()
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error for artist {original_artist_name}: {e}")
-        return None
-    except requests.exceptions.Timeout as e:
-        logger.error(f"Timeout error for artist {original_artist_name}: {e}")
-        return None
-    except requests.exceptions.RequestException as e:
-        logger.error(f"API error for artist {original_artist_name}: {e}")
-        return None
-    except ConnectionError as e:
-        logger.error(f"Connection error for artist {original_artist_name}: {e}")
+def match_artists_from_lastfm(track_data: dict, key: str) -> dict | None:
+    """Enrich a track match with Last.fm artist-level stats.
+
+    Calls ``artist.getInfo`` using the original Spotify artist name (not the
+    Last.fm matched name) and adds ``mbid``, ``on_tour``, ``artist_listeners``,
+    and ``artist_playcount`` to the payload.
+
+    Args:
+        track_data: Output from ``get_track_from_lastfm``.
+        key: Last.fm API key.
+
+    Returns:
+        Updated track_data dict, or None if artist lookup fails validation.
+    """
+    spotify_artist_name = track_data.get("original_artist_name") or track_data.get("artist_name")
+    if not spotify_artist_name:
         return None
 
-    # Debug: print(json.dumps(data, indent=2))
-    
-    #Dig through the JSON
-    artist= data.get('artist', {})
-    stats = artist.get('stats', {})
+    data = _lastfm_get({"method": "artist.getInfo", "artist": spotify_artist_name}, key)
+    if not data or "artist" not in data:
+        return None
+
+    artist = data["artist"]
+    stats = artist.get("stats", {})
     if not artist:
         return None
-    
-    #get name and normalize for similarity score
-    artist_name = artist.get('name', None).lower().strip()
-    original_artist_name=original_artist_name.lower().strip()
-    
-    artist_score=similarity_score(artist_name, original_artist_name)
 
-    if artist_score<.9:
+    lastfm_artist_name = (artist.get("name") or "").lower().strip()
+    spotify_artist_normalized = spotify_artist_name.lower().strip()
+    artist_score = similarity_score(lastfm_artist_name, spotify_artist_normalized)
+
+    if artist_score < 0.9:
         return None
-    
-    #get other useful data and add to track_data
-    track_data['mbid']= artist.get('mbid', None)
-    track_data['on_tour'] = artist.get('on_tour', 0)
-    track_data['artist_listeners']=int(stats.get('listeners', 0))
-    track_data['artist_playcount'] = int(stats.get('playcount',0))
-    track_data['source']='Lastfm'
 
-    logger.debug(f"Processed track data: {track_data}")
+    track_data["mbid"] = artist.get("mbid") or track_data.get("mbid")
+    track_data["on_tour"] = artist.get("ontour", artist.get("on_tour", 0))
+    track_data["artist_listeners"] = int(stats.get("listeners") or 0)
+    track_data["artist_playcount"] = int(stats.get("playcount") or 0)
+    track_data["source"] = "Lastfm"
+
+    logger.debug("Processed track data: %s", track_data)
     return track_data
 
-def process_last_fm_data(song_name, artist_name, song_id, artist_id, key):
+def process_last_fm_data(
+    song_name: str, artist_name: str, song_id: str, artist_id: str, key: str
+) -> dict | None:
+    """Fetch and merge track + artist Last.fm data for one Spotify song.
+
+    Args:
+        song_name: Track title from Spotify staging.
+        artist_name: Primary artist name from Spotify staging.
+        song_id: Spotify track ID.
+        artist_id: Spotify artist ID.
+        key: Last.fm API key.
+
+    Returns:
+        Complete record dict for ``load_raw_records``, or None on failure.
+    """
     try:
 
         match_data = get_track_from_lastfm(song_name, artist_name, song_id, artist_id, key)
@@ -200,68 +377,94 @@ def process_last_fm_data(song_name, artist_name, song_id, artist_id, key):
     except Exception as e:
         logger.error(f"Error processing {song_name} by {artist_name}: {e}")
         return None
-
-if __name__ == '__main__':
     
-    #SETUP
-    try:
-        load_dotenv()
-        key = os.getenv("LAST_FM_KEY")
-        conn, cur=get_db()
-        producer = create_producer('music-streaming-producer')
-        track_error_count =0
-        track_success_count=0
-        #query database for song and artist names where there is missing lastfm data
-        cur.execute('SELECT s.song_name, a.artist_name,s.song_id, s.artist_id FROM songs AS s JOIN artists AS a ON s.artist_id=a.artist_id WHERE s.engagement_ratio IS NULL order by s.created_at desc')
-        res=cur.fetchall()
-        cpu_count= multiprocessing.cpu_count()
-        max_workers = max(8, cpu_count)
-        pending_batch = []
-        batch_size = 5
 
-        with ProcessPoolExecutor(max_workers=max_workers) as w:
-            futures = {w.submit(process_last_fm_data, song_name, artist_name, song_id, artist_id, key):(song_name, artist_name, song_id,artist_id) for song_name, artist_name, song_id, artist_id in res}
+# Songs in staging that have no matching row in stg_lastfm yet.
+SONGS_NEEDING_LASTFM_QUERY = """
+    SELECT
+        t.artist_id, t.song_id, t.song_name, t.artist_name
+    FROM MUSICDB.STAGING.stg_spotify__tracks t
+    LEFT JOIN MUSICDB.STAGING.stg_lastfm a
+        ON a.song_id = t.song_id
+    WHERE t.artist_id IS NOT NULL
+        AND t.song_id IS NOT NULL
+        AND a.song_id IS NULL
+        AND t.song_name IS NOT NULL
+        AND t.artist_name IS NOT NULL
+    ORDER BY t._loaded_at DESC
+"""
+
+
+def main(batch_size: int = 5, run_id: str | None = None) -> None:
+    """Backfill Last.fm enrichment for Spotify tracks missing from staging.
+
+    Queries STAGING (not RAW) for the gap set, processes songs in chunks,
+    and loads successful matches into ``raw_lastfm``.
+
+    Args:
+        batch_size: Number of songs to process per Snowflake load batch.
+        run_id: Optional run identifier; generated if omitted.
+    """
+    load_dotenv()
+    key = os.getenv("LAST_FM_KEY")
+
+    if not key:
+        raise RuntimeError("LAST_FM_KEY is not set")
+
+    logger.info("Querying staging for songs missing Last.fm enrichment")
+    rows = fetch_all(SONGS_NEEDING_LASTFM_QUERY)
+
+    if not rows:
+        logger.error("All of the Spotify track data is enhanced by LastFm")
+        return
+    
+    run_id = run_id or str(uuid.uuid4())
+
+    for i in range(0, len(rows), batch_size):
+        batch_data=[]
+        stop = i+ batch_size if (i+batch_size)<= len(rows) else len(rows)
+        chunk = rows[i: stop]
+        for artist_id, song_id, song_name, artist_name  in chunk:
+
+            if not song_name or not artist_id or not song_id or not artist_name:
+                logger.warning("Skipping row with missing artist or song data")
+                continue
+
+            logger.info(f"Requesting LastFm data for {song_name} by {artist_name}")
+
+            complete_data = process_last_fm_data(song_name, artist_name, song_id, artist_id, key)
+
+            if not complete_data: 
+                logger.warning(f'There was no LastFm artist data for song: {song_name} by artist: {artist_name}')
+                continue
+
+            batch_data.append(complete_data)
+
+        if not batch_data:
+            logger.warning("No Last.fm matches in this chunk to load")
+            continue
+
+        with snowflake_connection() as conn:
+            num_rows, error_count = load_raw_records(
+                table="raw_lastfm",
+                records=batch_data,
+                id_columns="song_id",
+                run_id=str(run_id),
+                conn=conn,
+            )
+
+        logger.info(f'This batch successfully inserted {num_rows} rows into the Raw LastFm database')
+        logger.info(f'There were {error_count} errenous rows in this batch')
+
         
-            for future in as_completed(futures):
-                
-                song_name, artist_name, song_id, artist_id=futures[future]
-                try:
-                    data= future.result(timeout=60)
-                    logger.debug(f"Processed data: {data}")
-                    if data:
-                        pending_batch.append(data)
-                        if len(pending_batch) >= batch_size:
-                            successful, failed = safe_batch_send(pending_batch, 'lastfm_artist', producer, batch_size=batch_size)
-                            track_success_count += successful
-                            track_error_count += failed
-                            logger.info(f'Batch sent: {successful} success, {failed} failed')
-                            pending_batch.clear()
-                        logger.debug(f'Sent {song_name} through kafka')
-                    else:
-                        track_error_count+=1
-                        continue
-                except Exception as e:
-                    logger.error(f"Error getting data from Last.fm for {song_name}: {e}")
-            
-                
 
-        if pending_batch:
-            successful, failed = safe_batch_send(pending_batch, 'lastfm_artist', producer, batch_size=batch_size)
-            track_success_count += successful
-            track_error_count += failed
-            logger.info(f'Final batch sent: {successful} success, {failed} failed')
-
-
-        logger.info(f"Track processing complete - Success: {track_success_count}, Errors: {track_error_count}")
-        flush_kafka_producer(producer)
-    except Exception as e:
-        logger.error(f"Error during Last.fm data extraction: {e}")
-
+    
     
 
 
-       
-    
-        
-    
 
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    run_id = str(uuid.uuid4())
+    main(batch_size=500, run_id=run_id)
+    
