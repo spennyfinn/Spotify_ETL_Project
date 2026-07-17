@@ -163,3 +163,58 @@ class TestSpotifyTrackSeedMain:
         """Raises RuntimeError when get_words_list returns nothing to query."""
         with pytest.raises(RuntimeError, match="No words list"):
             spotify_seed_main.main(batch_size=1, start_idx=0, run_id="seed-run")
+
+
+class TestSpotifyArtistExtractorMain:
+    @patch("src.extract.spotify_artist_extractor.load_raw_records", return_value=(1, 0))
+    @patch("src.extract.spotify_artist_extractor.snowflake_connection")
+    @patch("src.extract.spotify_artist_extractor.extract_spotify_artist_metrics")
+    @patch("src.extract.spotify_artist_extractor.fetch_all")
+    @patch.dict(
+        "os.environ",
+        {"SPOTIFY_CLIENT_ID": "id", "SPOTIFY_CLIENT_SECRET": "secret"},
+        clear=False,
+    )
+    def test_loads_batch_when_metrics_exist(
+        self,
+        mock_fetch_all,
+        mock_extract,
+        mock_snowflake_conn,
+        mock_load,
+    ):
+        """main() loads artist metrics into raw_spotify_artists."""
+        from src.extract import spotify_artist_extractor
+
+        mock_fetch_all.return_value = [("artist-1", "The Weeknd")]
+        mock_extract.return_value = {
+            "artist_id": "artist-1",
+            "artist_name": "The Weeknd",
+            "follower_count": 1_000,
+            "popularity": 90,
+            "genres": ["pop"],
+            "source": "Spotify",
+        }
+        mock_snowflake_conn.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_snowflake_conn.return_value.__exit__ = MagicMock(return_value=False)
+
+        spotify_artist_extractor.main(batch_size=5, run_id="artist-run")
+
+        mock_load.assert_called_once()
+        kwargs = mock_load.call_args.kwargs
+        assert kwargs["table"] == "raw_spotify_artists"
+        assert kwargs["run_id"] == "artist-run"
+        assert kwargs["id_columns"] == "artist_id"
+
+    @patch("src.extract.spotify_artist_extractor.fetch_all", return_value=[])
+    @patch.dict(
+        "os.environ",
+        {"SPOTIFY_CLIENT_ID": "id", "SPOTIFY_CLIENT_SECRET": "secret"},
+        clear=False,
+    )
+    def test_exits_when_no_gap_rows(self, mock_fetch_all):
+        """Returns early when all artists already exist in staging."""
+        from src.extract import spotify_artist_extractor
+
+        spotify_artist_extractor.main(batch_size=5, run_id="artist-run")
+
+        mock_fetch_all.assert_called_once()
