@@ -357,8 +357,8 @@ def main(batch_size: int, run_id : str):
                 conn=conn,
             )
 
-        logger.info(f"Successfully loaded {n_rows} into the Raw Audio Features Table")
-        logger.info(f"There were {error_count} errors in the batch")
+        logger.info(f'This batch successfully inserted {n_rows} rows into the Raw Audio Features Table')
+        logger.info(f'There were {error_count} errenous rows in this batch')
                 
 
         

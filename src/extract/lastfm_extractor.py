@@ -453,7 +453,7 @@ def main(batch_size: int = 5, run_id: str | None = None) -> None:
                 conn=conn,
             )
 
-        logger.info(f'This batch successfully inserted {num_rows} rows into the Raw LastFm database')
+        logger.info(f'This batch successfully inserted {num_rows} rows into the Raw LastFm Table')
         logger.info(f'There were {error_count} errenous rows in this batch')
 
         

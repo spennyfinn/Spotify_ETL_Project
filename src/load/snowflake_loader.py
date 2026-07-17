@@ -88,6 +88,9 @@ def load_raw_records(
     if table_id not in table_id_pairs:
         raise ValueError("The table and id_column is not in the valid pairs")
 
+    if not records:
+        return (0, 0)
+
     error_count = 0
     successful_records = []
     for record in records:

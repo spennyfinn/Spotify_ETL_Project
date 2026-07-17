@@ -4,8 +4,6 @@ import os
 import logging
 from dotenv import load_dotenv
 
-from tests.unit.constants import AUDIO_FEATURES_REQUIRED_FIELDS
-
 logger = logging.getLogger(__name__)
 
 

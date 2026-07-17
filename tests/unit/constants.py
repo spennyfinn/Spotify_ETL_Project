@@ -84,3 +84,81 @@ SIMILARITY_SCORE_VALUES_IDS = [
     "No Match",
     "Partial Match",
 ]
+
+
+VALID_RAW_LASTFM = {
+    "song_id": "abc123",
+    "original_song_name": "blinding lights",
+    "original_artist_name": "the weeknd",
+    "artist_id": "artist1",
+    "listeners": 1000,
+    "artist_listeners": 1_000_000,
+    "artist_playcount": 30_000_000,
+    "source": "Lastfm",
+}
+
+VALID_RAW_AUDIO_FEATURES = {
+    "song_id": "track_xyz",
+    "bpm": 120.5,
+    "energy": 0.65,
+    "zero_crossing_rate": 0.08,
+    "harmonic_ratio": 0.7,
+    "percussive_ratio": 0.3,
+    "preview_url": "https://p.scdn.co/mp3-preview/example",
+    "source": "Librosa",
+}
+
+VALID_RAW_SPOTIFY_TRACKS = {
+    "song_id": "4uLU6hMCjMI75M1A2tKUQC",
+    "name": "Blinding Lights",
+    "artist_id": "1Xyo4u8uXC1ZmMpatF05PJ",
+    "duration_ms": 200_040,
+    "source": "Spotify",
+}
+
+VALID_RAW_SPOTIFY_ARTISTS = {
+    "artist_id": "1Xyo4u8uXC1ZmMpatF05PJ",
+    "artist_name": "The Weeknd",
+    "follower_count": 50_000_000,
+    "popularity": 95,
+    "source": "Spotify",
+}
+
+RAW_LOAD_TABLE_CASES = [
+    ("raw_lastfm", "song_id", VALID_RAW_LASTFM),
+    ("raw_audio_features", "song_id", VALID_RAW_AUDIO_FEATURES),
+    ("raw_spotify_tracks", "song_id", VALID_RAW_SPOTIFY_TRACKS),
+    ("raw_spotify_artists", "artist_id", VALID_RAW_SPOTIFY_ARTISTS),
+]
+RAW_LOAD_TABLE_CASE_IDS = [
+    "lastfm",
+    "audio_features",
+    "spotify_tracks",
+    "spotify_artists",
+]
+
+RAW_PAYLOAD_SHAPE_CASES = [
+    ("raw_lastfm", "song_id", VALID_RAW_LASTFM, "song_id", ("source", "Lastfm")),
+    (
+        "raw_audio_features",
+        "song_id",
+        VALID_RAW_AUDIO_FEATURES,
+        "song_id",
+        ("source", "Librosa"),
+    ),
+    (
+        "raw_spotify_tracks",
+        "song_id",
+        VALID_RAW_SPOTIFY_TRACKS,
+        "song_id",
+        ("name", "Blinding Lights"),
+    ),
+    (
+        "raw_spotify_artists",
+        "artist_id",
+        VALID_RAW_SPOTIFY_ARTISTS,
+        "artist_id",
+        ("popularity", 95),
+    ),
+]
+RAW_PAYLOAD_SHAPE_CASE_IDS = RAW_LOAD_TABLE_CASE_IDS
