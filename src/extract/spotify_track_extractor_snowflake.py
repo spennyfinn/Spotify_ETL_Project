@@ -41,7 +41,7 @@ def main(batch_size: int = 5, start_idx: int = 0, run_id: str | None = None) -> 
             continue
 
         with snowflake_connection() as conn:
-            successful, error = load_raw_records(
+            num_rows, error_count = load_raw_records(
                 table="raw_spotify_tracks",
                 records=data,
                 id_columns="song_id",
@@ -49,8 +49,8 @@ def main(batch_size: int = 5, start_idx: int = 0, run_id: str | None = None) -> 
                 conn=conn,
             )
 
-        logger.info(f"Number of successful Spotify Tracks loaded: {successful}")
-        logger.info(f"Number of Spotify Tracks that were not loaded: {error}")
+        logger.info(f'This batch successfully inserted {num_rows} rows into the Raw Spotify Track Table')
+        logger.info(f'There were {error_count} errenous rows in this batch')
 
 
 if __name__ == "__main__":

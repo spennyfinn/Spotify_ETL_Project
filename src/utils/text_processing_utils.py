@@ -92,7 +92,12 @@ def similarity_score(str1, str2):
         raise TypeError(f'{str1} is not a string, rather it is a(n) {type(str1)} ')
     if type(str2) is not str:
         raise TypeError(f'{str2} is not a string, rather it is a(n) {type(str2)} ')
-    return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
+    a, b = str1.lower(), str2.lower()
+    # ratio() is not symmetric for all pairs; max of both orderings matches intuitive "similarity"
+    return max(
+        SequenceMatcher(None, a, b).ratio(),
+        SequenceMatcher(None, b, a).ratio(),
+    )
 
 
 def get_words_list():
