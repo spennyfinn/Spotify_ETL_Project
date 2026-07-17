@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install system libraries (Librosa)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsndfile1 ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --tb=short
+
+  dbt-parse:
+    name: dbt compile (parse)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: music_streaming_dbt
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install dbt (Snowflake adapter)
+        run: pip install --upgrade pip && pip install "dbt-snowflake>=1.8.0,<2.0.0"
+
+      - name: Configure dbt profile for parse-only CI
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<'EOF'
+          music_streaming_dbt:
+            target: ci
+            outputs:
+              ci:
+                type: snowflake
+                account: ci-placeholder
+                user: ci
+                password: ci
+                role: ci
+                database: ci
+                warehouse: ci
+                schema: public
+                threads: 1
+          EOF
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Parse project (no warehouse connection)
+        run: dbt parse

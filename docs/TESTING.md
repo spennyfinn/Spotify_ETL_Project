@@ -10,7 +10,7 @@ pytest tests/unit/ -v
 
 | Command | Purpose |
 |---------|---------|
-| `pytest tests/unit/ -v` | Full Python unit suite (~159 tests), no Snowflake/API secrets |
+| `pytest tests/unit/ -v` | Full Python unit suite (~168 tests), no Snowflake/API secrets |
 | `pytest tests/unit/load/ -v` | RAW loader only |
 | `pytest tests/unit/extract/ -v` | Extractors + main() wiring |
 | `pytest path::TestClass::test_name -v` | Single test |
@@ -20,10 +20,14 @@ pytest tests/unit/ -v
 
 ## CI (GitHub Actions)
 
-Workflow: `.github/workflows/ci.yml`
+Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
-1. **unit-tests** — `pytest tests/unit/`
-2. **dbt-parse** — `dbt deps` + `dbt parse` in `music_streaming_dbt/`
+| Job | What it runs |
+|-----|----------------|
+| **Python unit tests** | `pytest tests/unit/ -v` on Ubuntu (Python 3.12) |
+| **dbt compile (parse)** | `dbt deps` + `dbt parse` with a placeholder Snowflake profile (no live connection) |
+
+Triggers: every push and pull request.
 
 With Snowflake credentials (manual / nightly): run `dbt test` against a dev schema to execute YAML tests in `music_streaming_dbt/models/`.
 
@@ -149,8 +153,9 @@ Target: `src/load/snowflake_loader.load_raw_records`.
 | `test_collects_tracks_from_search_pages` | Four offset pages aggregated |
 | `test_continues_when_request_fails` | Failed requests → empty list |
 | `test_skips_malformed_json_response` | `JSONDecodeError` handled |
-| `test_parses_artist_payload` | Artist API → loader dict |
+| `test_parses_artist_payload` | Artist API → loader dict; passes 429 retry kwargs |
 | `test_returns_none_without_response` | No HTTP response → `None` |
+| `test_returns_none_when_rate_limit_exhausted` | HTTP 429 after retries → `None` |
 
 ---
 
@@ -174,9 +179,15 @@ Target: `src/load/snowflake_loader.load_raw_records`.
 
 | Test | What it checks |
 |------|----------------|
+| `test_uses_retry_after_header_when_present` | `_retry_after_seconds` honors header |
+| `test_exponential_backoff_when_no_retry_after` | Backoff doubles by attempt |
 | `test_safe_requests_success_first_try` | Single 200 response |
-| `test_safe_requests_retries_then_succeeds` | Retry then success |
+| `test_safe_requests_retries_then_succeeds` | Retry then success (non-429) |
 | `test_safe_requests_raises_after_max_retries` | Exhausted retries raise |
+| `test_safe_requests_retries_429_then_succeeds` | 429 backoff then 200 |
+| `test_safe_requests_stops_after_rate_limit_retries` | Stops after 5 rate-limit retries |
+| `test_safe_requests_429_exponential_backoff_without_retry_after` | Sleep 2s, 4s without header |
+| `test_safe_requests_429_does_not_consume_generic_retry_budget` | Only 6 calls on persistent 429 |
 
 ---
 

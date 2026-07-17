@@ -1,17 +1,14 @@
 """Unit tests for Spotify extract helpers and batch search."""
 
 import json
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
+from src.extract.spotify_artist_extractor import extract_spotify_artist_metrics
 from src.extract.spotify_track_extractor import extract_batch_spotify_data
 from src.utils.spotify_api_utils import extract_spotify_data
-
-# Legacy artist extractor still imports removed Kafka helpers; stub for unit tests.
-sys.modules.setdefault("src.utils.kafka_utils", MagicMock())
-from src.extract.spotify_artist_extractor import extract_spotify_artist_metrics  # noqa: E402
 
 
 def _spotify_track_item(
@@ -134,10 +131,9 @@ class TestExtractBatchSpotifyData:
 
 
 class TestExtractSpotifyArtistMetrics:
-    @patch("src.extract.spotify_artist_extractor.time.sleep")
     @patch("src.extract.spotify_artist_extractor.get_spotify_token", return_value="token")
     @patch("src.extract.spotify_artist_extractor.safe_requests")
-    def test_parses_artist_payload(self, mock_safe_requests, _mock_token, _mock_sleep):
+    def test_parses_artist_payload(self, mock_safe_requests, _mock_token):
         """Maps artist API JSON to raw_spotify_artists loader fields."""
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -156,9 +152,32 @@ class TestExtractSpotifyArtistMetrics:
         assert result["artist_name"] == "The Weeknd"
         assert result["follower_count"] == 50_000_000
         assert result["source"] == "Spotify"
+        mock_safe_requests.assert_called_once_with(
+            "GET",
+            "https://api.spotify.com/v1/artists/artist-1",
+            timeout=5,
+            headers={"Authorization": "Bearer token"},
+            rate_limit_max_retries=5,
+            backoff=1.0,
+        )
 
     @patch("src.extract.spotify_artist_extractor.get_spotify_token", return_value="token")
     @patch("src.extract.spotify_artist_extractor.safe_requests", return_value=None)
     def test_returns_none_without_response(self, _mock_safe_requests, _mock_token):
         """Returns None when safe_requests yields no response."""
         assert extract_spotify_artist_metrics("artist-1", "The Weeknd") is None
+
+    @patch("src.extract.spotify_artist_extractor.get_spotify_token", return_value="token")
+    @patch("src.extract.spotify_artist_extractor.safe_requests")
+    def test_returns_none_when_rate_limit_exhausted(self, mock_safe_requests, _mock_token):
+        """Returns None when safe_requests raises HTTP 429 after all retries."""
+        response = MagicMock()
+        response.status_code = 429
+        mock_safe_requests.side_effect = requests.HTTPError(
+            "429 Client Error",
+            response=response,
+        )
+
+        assert extract_spotify_artist_metrics("artist-1", "The Weeknd") is None
+        mock_safe_requests.assert_called_once()
+        assert mock_safe_requests.call_args.kwargs["rate_limit_max_retries"] == 5
